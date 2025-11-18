@@ -1,0 +1,44 @@
+version: '2.27.0'
+
+services:
+  registry-discovery:
+    container_name: id-sellout-eureka
+    image: sistemasmanamer/sellout-eurekaserver:2.0
+    build: infraestructure/eureka/
+    ports:
+      - 8761:8761
+
+  apigateway:
+    container_name: id-sellout-apigateway
+    image: sistemasmanamer/sellout-apigateway:2.0
+    build: infraestructure/apigateway/
+    environment:
+      - JAVA_OPTS=-DEUREKA_SERVER=http://registry-discovery:8761/eureka/
+    depends_on:
+      - registry-discovery
+    ports:
+      - 8090:8090
+
+  keycloak:
+    container_name: id-sellout-keycloakAdapter
+    image: sistemasmanamer/sellout-keycloak-adapter:2.0
+    build: infraestructure/keycloakAdapter/
+    environment:
+      - JAVA_OPTS=-DEUREKA_SERVER=http://registry-discovery:8761/eureka/ -DKEYCLOACK_SERVER=http://192.168.246.246:9090/realms/ -DKEYCLOACK_REAL_ID=Yh9nCqRYABYUiSiTfJacIUOZa1lfBgTVaiJ9i7tpSd0
+    depends_on:
+      - registry-discovery
+    ports:
+      - 8091:8091
+
+  sellout:
+    container_name: bd-sellout
+    image: sistemasmanamer/sellout:2.0
+    build: business/sellout/
+    environment:
+      - JAVA_OPTS=-Xms256M -Xmx256M -DEUREKA_SERVER=http://registry-discovery:8761/eureka/
+    depends_on:
+      - registry-discovery
+    ports:
+      - 8092:8092
+
+  

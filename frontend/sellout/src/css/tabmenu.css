@@ -1,0 +1,92 @@
+/* Estilos para las tarjetas de empresa */
+.company-card {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 2rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  border-left: 5px solid var(--company-color, #4f46e5);
+}
+
+.company-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.company-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 150px;
+  height: 150px;
+  background: radial-gradient(circle, rgba(var(--company-color-rgb, 79, 70, 229), 0.1) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(50%, -50%);
+  z-index: 0;
+}
+
+.company-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background-color: rgba(var(--company-color-rgb, 79, 70, 229), 0.1);
+  color: var(--company-color, #4f46e5);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.company-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.company-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.company-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.company-option svg {
+  color: var(--company-color, #4f46e5);
+}
+
+/* Convertir los valores hexadecimales a RGB para usar en rgba() */
+[style*="--company-color: #4f46e5"] {
+  --company-color-rgb: 79, 70, 229;
+}
+
+[style*="--company-color: #e11d48"] {
+  --company-color-rgb: 225, 29, 72;
+}
+
+/* Estilos responsivos */
+@media (max-width: 768px) {
+  .company-card {
+    padding: 1.5rem;
+  }
+  
+  .company-icon {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .company-name {
+    font-size: 1.25rem;
+  }
+}

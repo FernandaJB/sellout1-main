@@ -1,0 +1,281 @@
+/* Contenedor principal del formulario de registro */
+.register-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100%;
+  position: relative;
+  background: linear-gradient(125deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+  color: #fff; /* Aseguramos que todo el texto dentro del contenedor sea blanco */
+}
+
+.register-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.3);
+  z-index: -1;
+}
+
+/* Tarjeta que envuelve el formulario */
+.register-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 480px;
+  padding: 40px;
+  background: rgba(30, 41, 59, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+/* Efectos decorativos */
+.register-card::before,
+.register-card::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.register-card::before {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  top: -100px;
+  right: -100px;
+}
+
+.register-card::after {
+  width: 250px;
+  height: 250px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+  bottom: -125px;
+  left: -125px;
+}
+
+/* Título del formulario de registro */
+.register-title {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 30px;
+  letter-spacing: 1px;
+  color: #fff;
+  text-transform: uppercase;
+  position: relative;
+}
+
+.register-title::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Estilos para los campos del formulario */
+.p-field {
+  position: relative;
+  margin-bottom: 25px;
+  text-align: left;
+  color: #fff;
+}
+
+.p-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Estilos para los inputs de texto */
+.p-inputtext {
+  width: 100%;
+  padding: 14px 15px;
+  font-size: 15px;
+  color: #fff !important; /* Forzamos que el texto de input sea blanco */
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+  border-radius: 8px;
+}
+
+.p-inputtext:focus {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.p-inputtext::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* Estilos para los inputs de contraseña */
+.p-password {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.p-password:focus-within {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Reforzamos los estilos para el input de contraseña */
+.p-password input,
+.p-password .p-inputtext,
+.p-password input.p-inputtext {
+  background: transparent !important;
+  color: #fff !important; /* Forzamos que el texto sea blanco */
+  padding: 14px 15px;
+  font-size: 15px;
+  caret-color: #fff; /* Color del cursor de texto */
+}
+
+/* Aseguramos que el texto sea blanco incluso cuando está seleccionado */
+.p-password input::selection {
+  background-color: rgba(99, 102, 241, 0.3);
+  color: #fff;
+}
+
+/* Estilo para el ícono del ojo en el input de contraseña */
+.p-password i,
+.p-password .p-icon,
+.p-password svg,
+.p-password button,
+.p-password .p-password-toggle {
+  color: #fff !important; /* Forzamos que el ícono sea blanco */
+  fill: #fff !important; /* Para SVGs */
+  opacity: 0.8;
+}
+
+.p-password .p-password-panel {
+  background: rgba(30, 41, 59, 0.95);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Estilos para los mensajes de error */
+.p-error {
+  color: #f87171;
+  margin-top: 6px;
+  font-size: 14px;
+  text-align: left;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #f87171;
+}
+
+.p-button-primary {
+  width: 100%;
+  padding: 14px 0;
+  background: linear-gradient(to right, #4f46e5, #6366f1);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.p-button-primary:hover {
+  background: linear-gradient(to right, #4338ca, #4f46e5);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(99, 102, 241, 0.4);
+}
+
+.p-button-primary:active {
+  transform: translateY(0);
+}
+
+/* Estilos para el botón de regreso */
+.p-button-secondary {
+  width: 100%;
+  padding: 12px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.p-button-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.p-button-secondary:active {
+  transform: translateY(0);
+}
+
+/* Estilos para el mensaje de éxito */
+.p-success {
+  color: #34d399;
+  margin-top: 15px;
+  font-size: 14px;
+  text-align: left;
+  background: rgba(52, 211, 153, 0.1);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid #34d399;
+}
+
+/* Círculos decorativos adicionales */
+.register-container::after {
+  content: '';
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, transparent 70%);
+  top: 50%;
+  right: -200px;
+  transform: translateY(-50%);
+  z-index: 0;
+}
+
+/* Responsive styles */
+@media (max-width: 480px) {
+  .register-card {
+    width: 90%;
+    padding: 30px 20px;
+  }
+  
+  .register-title {
+    font-size: 1.8rem;
+  }
+}
+  

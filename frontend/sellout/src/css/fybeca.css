@@ -1,0 +1,1303 @@
+/* Reset de márgenes y bordes */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Body principal */
+body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background-color: #dadadade;
+    color: #333;
+    line-height: 1.6;
+    padding: 10px;
+}
+
+/* Títulos */
+h1, h2 {
+    color: #000;
+    font-weight: 700;
+}
+
+h1 {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+h2 {
+    font-size: 1.8rem;
+    text-align: center;
+    margin-bottom: 30px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+/* Botones CRUD (Azul Oscuro) */
+button.crud-button, .btn-crud,
+button[title="Eliminar"], button[title="Leer"], button[title="Editar"], button[title="Actualizar"], button[title="Crear"],
+.p-button.p-button-danger, .p-button.p-button-info, .p-button.p-button-success, .p-button.p-button-warning,
+button.create-button, button.read-button, button.update-button, button.edit-button, button.delete-button {
+    background-color: #053b81 !important;
+    color: white !important;
+    border-color: #053b81 !important;
+}
+
+button.crud-button:hover, .btn-crud:hover,
+button[title="Eliminar"]:hover, button[title="Leer"]:hover, button[title="Editar"]:hover, button[title="Actualizar"]:hover, button[title="Crear"]:hover,
+.p-button.p-button-danger:hover, .p-button.p-button-info:hover, .p-button.p-button-success:hover, .p-button.p-button-warning:hover,
+button.create-button:hover, button.read-button:hover, button.update-button:hover, button.edit-button:hover, button.delete-button:hover {
+    background-color: #032759 !important;
+    border-color: #032759 !important;
+}
+
+/* Botones Generales (Naranja) */
+button.general-button, .btn-general, .btn-template,
+.p-button[icon="pi pi-calendar"], .p-button[icon="pi pi-filter"], .p-button[icon="pi pi-file-excel"],
+button.filter-button, button.report-button, button.calendar-button,
+.btn-download, .btn-clear-filters, .btn-download-reporte,
+.p-button:not(.p-button-danger):not(.p-button-info):not(.p-button-success):not(.p-button-warning):not(.crud-button):not(.btn-crud) {
+    background-color:  #f3a81efb !important;
+    color: white !important;
+    border-color:  #f59518fb !important;
+}
+
+button.general-button:hover, .btn-general:hover, .btn-template:hover,
+.p-button[icon="pi pi-calendar"]:hover, .p-button[icon="pi pi-filter"]:hover, .p-button[icon="pi pi-file-excel"]:hover,
+button.filter-button:hover, button.report-button:hover, button.calendar-button:hover,
+.btn-download:hover, .btn-clear-filters:hover, .btn-download-reporte:hover,
+.p-button:not(.p-button-danger):not(.p-button-info):not(.p-button-success):not(.p-button-warning):not(.crud-button):not(.btn-crud):hover {
+    background-color:  #f59518fb !important;
+    border-color: #f08e0ffb !important;
+}
+
+/* Contenedor principal */
+.container {
+    max-width: 1840px;
+    margin: 40px auto;
+    padding: 40px;
+    background-color: #ffffffe7;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+/* Botón de subir archivo */
+input[type="file"] {
+    display: block;
+    margin: 20px auto;
+    padding: 15px 25px;
+    font-size: 1.1rem;
+    color: #fff;
+    background-color: #271e75;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    width: auto;
+}
+
+input[type="file"]:hover {
+    background-color: #292d6f;
+    transform: scale(1.05);
+}
+
+input[type="file"]:focus {
+    outline: none;
+}
+
+/* Mensajes de error o carga */
+p {
+    text-align: center;
+    font-size: 1.2rem;
+    margin: 20px 0;
+    color: #333;
+}
+
+p.error {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+p.loading {
+    color: #f39c12;
+    font-style: italic;
+}
+
+/* Tablas de productos/clientes */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+table th, table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+table th {
+    background-color: #6666666a;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+table tr:hover {
+    background-color: #f7f7f7;
+}
+
+table tr:nth-child(even) {
+    background-color: #f4f6f9;
+}
+
+table td a {
+    color: #16a085;
+    text-decoration: none;
+}
+
+table td a:hover {
+    text-decoration: underline;
+}
+
+/* Diseño responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        font-size: 1.6rem;
+    }
+
+    input[type="file"] {
+        width: 100%;
+    }
+
+    table th, table td {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+}
+
+/* Estilo general de los botones */
+button, .btn {
+    display: inline-block;
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-weight: bold;
+    text-align: center;
+    color: #ffffff;
+    background-color: #0c366c;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    text-decoration: none;
+    margin: 5px;
+}
+
+button:hover, .btn:hover {
+    background-color: #0a2672;
+    transform: scale(1.05);
+}
+
+button:active, .btn:active {
+    background-color: #0a0f6a;
+    transform: scale(0.95);
+}
+
+button:disabled, .btn:disabled {
+    background-color: #b2b2b2;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Mensajes de error o carga */
+p {
+    text-align: center;
+    font-size: 1.2rem;
+    margin: 20px 0;
+    color: #333;
+}
+
+p.error {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+p.loading {
+    color: #f39c12;
+    font-style: italic;
+}
+
+/* Tablas de productos/clientes */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+table th, table td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+table th {
+    background-color: #6666666a;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+table tr:hover {
+    background-color: #f7f7f7;
+}
+
+table tr:nth-child(even) {
+    background-color: #f4f6f9;
+}
+
+table td a {
+    color: #16a085;
+    text-decoration: none;
+}
+
+table td a:hover {
+    text-decoration: underline;
+}
+
+/* Diseño responsive */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px;
+        margin: 20px;
+    }
+
+    h1, h2 {
+        font-size: 1.6rem;
+    }
+
+    input[type="file"] {
+        width: 100%;
+    }
+
+    table th, table td {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+    }
+
+    .table-wrapper {
+        overflow-x: auto;
+    }
+}
+
+/* Estilo para botones de alerta */
+button.alert, .btn.alert {
+    background-color: #e74c3c;
+}
+
+button.alert:hover, .btn.alert:hover {
+    background-color: #c0392b;
+}
+
+/* Estilo para botones de éxito */
+button.success, .btn.success {
+    background-color: #2ecc71;
+}
+
+button.success:hover, .btn.success:hover {
+    background-color: #27ae60;
+}
+
+/* Estilos del modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(17, 17, 17, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.modal-content {
+    background-color: #c7c7c7;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    width: 500px;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding: 25px;
+    border-radius: 10px;
+}
+
+/* Estilo de los campos de entrada en el modal */
+.modal-content input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #462121;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.modal-content label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: block;
+}
+
+/* Botones en el modal */
+.modal-content .button-group {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.modal-content button {
+    padding: 10px 20px;
+    font-size: 1rem;
+    background-color: #070d64;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.modal-content button:hover {
+    background-color: #0f287a;
+}
+
+.modal-content button:focus {
+    outline: none;
+}
+
+/* Estilo para los inputs */
+input {
+    color: #333;
+}
+
+/* Estilo para los inputs de texto */
+input[type="text"] {
+    color: #333;
+}
+
+/* Estilo para los selectores de año y mes */
+select {
+    display: block;
+    margin: 10px 0;
+    padding: 10px 15px;
+    font-size: 1rem;
+    color: #333;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    width: auto;
+}
+
+select:hover {
+    background-color: #f7f7f7;
+    transform: scale(1.05);
+}
+
+select:focus {
+    outline: none;
+}
+
+/* Estilo para la sección de carga y filtros */
+.upload-section {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.upload-section input[type="text"],
+.upload-section select {
+    flex: 1;
+    min-width: 150px;
+    max-width: 300px;
+}
+
+.upload-section button {
+    align-self: flex-start;
+}
+
+/* Estilo para el input de filtro de ventas */
+.upload-section input[type="text"] {
+    padding: 10px 15px;
+    font-size: 1rem;
+    color: #333;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.upload-section input[type="text"]:hover {
+    background-color: #f7f7f7;
+    transform: scale(1.05);
+}
+
+.upload-section input[type="text"]:focus {
+    outline: none;
+    border-color: #16a085;
+}
+
+/* Botones CRUD específicos */
+.btn-crud {
+    background-color: #053b81 !important;
+    color: white !important;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    margin: 0 5px;
+    padding: 8px 15px;
+    border-radius: 4px;
+}
+
+.btn-crud:hover {
+    background-color: #032759 !important;
+    color: white !important;
+}
+
+.btn-crud i {
+    pointer-events: none;
+}
+
+.icon-edit {
+    cursor: pointer;
+    color: #053b81;
+    margin-left: 10px;
+}
+
+.icon-edit:hover {
+    color: #032759;
+}
+
+.btn-crud:active {
+    background-color: #021c3d !important;
+    transform: scale(0.95);
+}
+
+/* Botones de template (naranja con letras blancas) */
+.btn-template { 
+    background-color: #e67e22 !important;
+    color: #ffffff !important;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-weight: bold;
+    text-align: center;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin: 5px;
+}
+
+.btn-template:hover {
+    background-color: #d35400 !important;
+    transform: scale(1.05);
+}
+
+.btn-template:active {
+    background-color: #a04000 !important;
+    transform: scale(0.95);
+}
+
+.file-upload {
+    display: inline-block;
+    cursor: pointer;
+    color: white;
+    font-size: 16px;
+    padding: 10px;
+    border: 1px solid #004AAD;
+    border-radius: 4px;
+    background-color: #004AAD !important;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.file-upload:hover {
+    background-color: #003580 !important;
+    color: #fff;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px);
+}
+
+.file-upload i {
+    margin-right: 5px;
+}
+
+.btn-download {
+    background-color: #e67e22;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    margin-top: 10px;
+}
+
+.btn-download:hover {
+    background-color: #d35400;
+}
+
+.filter-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.filter-section label {
+    font-weight: bold;
+    color: #333;
+}
+
+.filter-section input {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+.filter-section button {
+    background-color: #e67e22;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.filter-section button:hover {
+    background-color: #d35400;
+    transform: scale(1.05);
+}
+
+.icon-disabled {
+    color: gray;
+    cursor: not-allowed;
+}
+
+.icon-enabled {
+    color: #053b81;
+    cursor: pointer;
+}
+
+.delete-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 18px;
+    color: #053b81;
+}
+
+.file-upload-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 18px;
+    cursor: pointer;
+    color: #e67e22;
+}
+
+.file-upload-label:hover {
+    color: #d35400;
+}
+
+.actions-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.selected-rows {
+    font-size: 16px;
+    color: #333;
+}
+/* Estilos para el diálogo de confirmación */
+.fybeca-confirm-dialog .p-dialog-header {
+  background-color: #1e3a8a;
+  color: white;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding: 1rem;
+}
+
+.fybeca-confirm-dialog .p-dialog-content {
+  background-color: white;
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+}
+
+.fybeca-confirm-dialog .p-dialog-content .p-confirm-dialog-icon {
+  color: #f59e0b;
+  font-size: 2rem;
+  margin-right: 1rem;
+}
+
+.fybeca-confirm-dialog .p-dialog-content .p-confirm-dialog-message {
+  font-size: 1.1rem;
+  color: #374151;
+}
+
+.fybeca-confirm-dialog .p-dialog-footer {
+  background-color: #f9fafb;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.fybeca-confirm-dialog .p-dialog-header .p-dialog-header-icon {
+  color: white !important;
+  background: transparent !important;
+  border: none !important;
+  font-size: 1.2rem !important;
+  margin-left: 0.5rem !important;
+  transition: transform 0.2s !important;
+}
+
+.fybeca-confirm-dialog .p-dialog-header .p-dialog-header-icon:hover {
+  background: rgba(151, 27, 27, 0.1) !important;
+  transform: scale(1.1) !important;
+  color: #f0f0f0 !important;
+}
+* Add this more specific selector for the X icon */
+.fybeca-confirm-dialog .p-dialog-header .p-dialog-header-close .p-dialog-header-close-icon {
+  color: white !important;
+  font-size: 1.2rem !important;
+  visibility: visible !important;
+  display: block !important;
+}
+.fybeca-confirm-dialog .p-dialog-header-close {
+  visibility: visible !important;
+  display: block !important;
+}
+.fybeca-confirm-dialog .p-dialog-header .p-dialog-header-close-icon {
+  font-size: 1.2rem !important;
+}
+.fybeca-confirm-button {
+  background-color: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 4px !important;
+  transition: background-color 0.3s ease !important;
+}
+
+.fybeca-confirm-button:hover {
+  background-color: #b91c1c !important;
+  border-color: #b91c1c !important;
+}
+
+.fybeca-cancel-button {
+  background-color: #f59e0b !important;
+  border-color: #f59e0b !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 4px !important;
+  transition: background-color 0.3s ease !important;
+}
+
+.fybeca-cancel-button:hover {
+  background-color: #d97706 !important;
+  border-color: #d97706 !important;
+}
+.btn-clear-filters {
+    background-color: #f59518fb;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    border-radius: 5px;
+}
+
+.btn-clear-filters i {
+    margin-right: 5px;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.pagination button {
+    background-color: #e67e22;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    margin: 0 5px;
+}
+
+.pagination button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.pagination span {
+    font-size: 16px;
+    margin: 0 10px;
+}
+
+h3 {
+    color: #000;
+}
+
+.custom-toast .p-toast {
+  top: calc(12cm + 50px) !important;
+  left: 50% !important;
+  transform: translate(-50%, 0) !important;
+  position: fixed !important;
+  width: 600px !important;
+  max-width: 90% !important;
+  z-index: 9999 !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  padding: 30px !important;
+  border-radius: 15px !important;
+  box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.5) !important;
+  border: 3px solid #4CAF50 !important;
+}
+
+.custom-toast .p-toast .p-toast-message {
+  color: #006400 !important;
+  font-size: 70px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+}
+
+.custom-toast .p-toast .p-toast-icon {
+  color: #03aa2c !important;
+  font-size: 90px !important;
+}
+
+.p-progressbar {
+  height: 25px !important;
+  border-radius: 10px;
+  background-color: #f3f3f3;
+}
+
+.p-progressbar .p-progressbar-value {
+  background: linear-gradient(90deg, #09ffff, #00adad) !important;
+  border-radius: 8px;
+  transition: width 0.9s ease-in-out;
+}
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.spinner-container {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.upload-section {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin: 15px 0;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.btn-download-reporte {
+  background-color: #e67e22;
+  color: white;
+  padding: 10px 15px;
+  border-radius: 5px;
+  text-decoration: none;
+}
+
+.p-datatable .p-sortable-column .p-sortable-column-icon {
+  display: none;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-actions {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.modal-actions button {
+  margin-left: 0.5rem;
+}
+/* Card Section Styles */
+.card-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.card-section h3 {
+  color: #053b81;
+  font-size: 1.3rem;
+  margin-top: 0;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eaeaea;
+  padding-bottom: 10px;
+}
+
+/* Button Grid Layout */
+.button-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 10px;
+}
+
+.button-item {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* File Upload Button */
+.file-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #004AAD !important;
+  color: white !important;
+  padding: 12px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: bold;
+  width: 100%;
+  text-align: center;
+  border: none;
+}
+
+.file-upload:hover {
+  background-color: #003580 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.file-upload i {
+  margin-right: 8px;
+}
+
+/* Filter Container */
+.filter-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.filter-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.filter-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #333;
+}
+
+.filter-group select,
+.filter-group input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+/* Search Input with Icon */
+.search-input {
+  position: relative;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #777;
+}
+
+.search-input input {
+  padding-left: 35px;
+}
+
+/* Filter Actions */
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+/* Actions Header */
+.actions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.selected-rows {
+  background-color: #f0f7ff;
+  padding: 8px 15px;
+  border-radius: 20px;
+  color: #053b81;
+  font-weight: bold;
+}
+
+.selected-rows i {
+  margin-right: 5px;
+}
+
+/* Table Section */
+.table-section {
+  overflow: hidden;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+/* Loading and Empty States */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 0;
+  color: #777;
+}
+
+.empty-state i {
+  margin-bottom: 15px;
+  color: #ddd;
+}
+
+/* Action Buttons in Table */
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+/* Pagination */
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
+  gap: 15px;
+}
+
+.pagination-info {
+  font-weight: bold;
+  color: #333;
+}
+
+.pagination-button {
+  min-width: 120px;
+}
+
+/* Modal Improvements */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #777;
+}
+
+.close-button:hover {
+  color: #333;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eaeaea;
+}
+
+/* Disabled Button State */
+.btn-crud.disabled,
+.btn-general.disabled {
+  background-color: #b2b2b2 !important;
+  cursor: not-allowed;
+  opacity: 0.7;
+  transform: none !important;
+}
+/* Mejoras para botones */
+.btn-general {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-general i {
+  font-size: 1.1em;
+  transition: transform 0.3s ease;
+}
+
+.btn-general:hover i {
+  transform: translateY(-2px);
+}
+
+.btn-general span {
+  position: relative;
+  z-index: 2;
+}
+
+.btn-hover-effect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  z-index: 1;
+}
+/* Mejoras para botones */
+.btn-general, .btn-crud {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-weight: 600;
+  border-radius: 6px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.9rem;
+  min-height: 48px;
+  width: 100%;
+}
+
+.btn-general i, .btn-crud i, .file-upload i {
+  font-size: 1.1em;
+  transition: transform 0.3s ease;
+}
+
+.btn-general:hover i, .btn-crud:hover i, .file-upload:hover i {
+  transform: translateY(-2px);
+}
+
+.btn-general span, .btn-crud span, .file-upload span {
+  position: relative;
+  z-index: 2;
+}
+
+.btn-hover-effect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  z-index: 1;
+}
+
+.btn-general:hover .btn-hover-effect, 
+.btn-crud:hover .btn-hover-effect,
+.file-upload:hover .btn-hover-effect {
+  transform: translateY(0);
+}
+
+/* Estilos específicos para la cuadrícula de botones */
+.button-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.button-item {
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+/* Ajustes para botones de acción */
+.action-buttons .btn-crud {
+  min-width: auto;
+  width: auto;
+  padding: 8px 12px;
+  min-height: 36px;
+}
+
+/* Ajustes para botones de filtro */
+.filter-actions .btn-general {
+  min-width: 150px;
+  width: auto;
+}
+
+.btn-general:hover .btn-hover-effect {
+  transform: translateY(0);
+}
+/* Estilo para el botón de aplicar filtros */
+.filter-actions .btn-general:first-child {
+  background-color: #004AAD !important; /* Azul corporativo de Fybeca */
+  color: white !important;
+  border-color: #004AAD !important;
+}
+
+.filter-actions .btn-general:first-child:hover {
+  background-color: #003580 !important; /* Azul más oscuro para hover */
+  border-color: #003580 !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .button-grid,
+  .filter-container,
+  .filter-actions {
+    flex-direction: column;
+  }
+  
+  .button-item,
+  .filter-group {
+    width: 100%;
+  }
+  
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,63 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "KeycloakAdapterApplication",
+            "request": "launch",
+            "mainClass": "com.sellout.KeycloakAdapterApplication",
+            "projectName": "keycloak-adapter"
+        },
+        {
+            "type": "java",
+            "name": "ApigatewayApplication",
+            "request": "launch",
+            "mainClass": "com.manamer.sellout.infraestructure.apigateway.ApigatewayApplication",
+            "projectName": "apigateway"
+        },
+        {
+            "type": "java",
+            "name": "EurekaserverApplication",
+            "request": "launch",
+            "mainClass": "com.manamer.sellout.infraestructure.eurekaserver.EurekaserverApplication",
+            "projectName": "eurekaserver"
+        },
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}"
+        },
+        {
+            "type": "java",
+            "name": "SelloutApplication",
+            "request": "launch",
+            "mainClass": "com.manamer.backend.business.sellout.SelloutApplication",
+            "projectName": "com.manamer.sellout.business-sellout"
+        },
+        {
+            "type": "java",
+            "name": "ApigatewayApplication",
+            "request": "launch",
+            "mainClass": "com.manamer.sellout.infraestructure.apigateway.ApigatewayApplication",
+            "projectName": "com.manamer.sellout.infraestructure.apigateway-apigateway"
+        },
+        {
+            "type": "java",
+            "name": "EurekaserverApplication",
+            "request": "launch",
+            "mainClass": "com.manamer.sellout.infraestructure.eurekaserver.EurekaserverApplication",
+            "projectName": "com.manamer.sellout.infraestructure.eurekaserver-eurekaserver"
+        },
+        {
+            "type": "java",
+            "name": "KeycloakAdapterApplication",
+            "request": "launch",
+            "mainClass": "com.sellout.KeycloakAdapterApplication",
+            "projectName": "com.manamer.sellout.infraestructure.keycloak-adapter-keycloak-adapter"
+        }
+    ]
+}

@@ -1,0 +1,135 @@
+/* Estilos específicos para el dashboard de empresas y módulos */
+.app-container .company-selection,
+.app-container .module-selection {
+  width: 100%;
+}
+
+.app-container .selection-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.app-container .company-grid,
+.app-container .module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.app-container .company-card,
+.app-container .module-card {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border-left: 4px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.app-container .company-card:hover,
+.app-container .module-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+.app-container .module-card.active {
+  border-color: #4f46e5;
+  background-color: #f8fafc;
+}
+
+.app-container .company-icon,
+.app-container .module-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.app-container .company-name,
+.app-container .module-name {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.app-container .company-description,
+.app-container .module-description {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+/* Estilos para la selección de módulos */
+.app-container .selection-header,
+.app-container .module-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+
+.app-container .back-button {
+  background-color: transparent;
+  color: #4f46e5;
+  border: 1px solid #4f46e5;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  margin-right: 1rem;
+}
+
+.app-container .back-button:hover {
+  background-color: #4f46e5;
+  color: white;
+}
+
+.app-container .module-container {
+  width: 100%;
+}
+
+.app-container .module-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.app-container .content-container .tab-content {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-container .company-grid,
+  .app-container .module-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .app-container .selection-header,
+  .app-container .module-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .app-container .back-button {
+    margin-right: 0;
+  }
+}

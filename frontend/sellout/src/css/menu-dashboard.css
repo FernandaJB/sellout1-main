@@ -1,0 +1,229 @@
+/* Estilos específicos para el dashboard de empresas y módulos */
+/* Usamos nombres de clases con prefijo 'menu-' para evitar conflictos */
+
+.menu-company-selection, 
+.menu-module-selection {
+  width: 100%;
+  padding: 1rem;
+}
+
+.menu-selection-title {
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: clamp(1rem, 3vw, 1.5rem);
+  text-align: center;
+}
+
+.menu-company-grid, 
+.menu-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: clamp(1rem, 3vw, 1.5rem);
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.menu-company-card, 
+.menu-module-card {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border-left: 4px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+}
+
+.menu-company-card:hover, 
+.menu-module-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+}
+
+.menu-module-card.active {
+  border-color: #4f46e5;
+  background-color: #f8fafc;
+}
+
+.menu-company-icon, 
+.menu-module-icon {
+  width: clamp(48px, 10vw, 64px);
+  height: clamp(48px, 10vw, 64px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.menu-company-name, 
+.menu-module-name {
+  font-size: clamp(1rem, 3vw, 1.25rem);
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.menu-company-description, 
+.menu-module-description {
+  font-size: clamp(0.75rem, 2vw, 0.875rem);
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+/* Estilos para la selección de módulos */
+.menu-selection-header, 
+.menu-module-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  position: relative;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.menu-back-button {
+  background-color: transparent;
+  color: #4f46e5;
+  border: 1px solid #4f46e5;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.menu-back-button:hover {
+  background-color: #4f46e5;
+  color: white;
+}
+
+.menu-module-container {
+  width: 100%;
+  padding: 0 1rem;
+}
+
+.menu-module-title {
+  font-size: clamp(1rem, 3vw, 1.25rem);
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.tab-content {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: clamp(1rem, 3vw, 1.5rem);
+  margin-top: 1rem;
+  overflow: hidden;
+}
+
+/* Estilos para el encabezado de la aplicación */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  background-color: #1e293b;
+  color: white;
+  padding: clamp(0.75rem, 2vw, 1rem) clamp(1rem, 3vw, 2rem);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.app-header h1 {
+  font-size: clamp(1.25rem, 4vw, 1.5rem);
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.5rem, 2vw, 1.5rem);
+  flex-wrap: wrap;
+}
+
+.user-info {
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
+  opacity: 0.9;
+}
+
+.logout-button {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: clamp(0.75rem, 2vw, 0.875rem);
+  transition: background-color 0.2s;
+}
+
+.logout-button:hover {
+  background-color: #dc2626;
+}
+
+.content-container {
+  flex: 1;
+  padding: clamp(1rem, 3vw, 2rem);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .menu-selection-header, 
+  .menu-module-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .menu-company-grid, 
+  .menu-module-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .header-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .logout-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Asegurar que los componentes internos no desborden */
+.tab-content > div {
+  max-width: 100%;
+  overflow-x: auto;
+}

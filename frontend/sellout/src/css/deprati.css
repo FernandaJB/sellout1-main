@@ -1,0 +1,2015 @@
+/* Reset de márgenes y bordes */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+/* Body principal con fondo más suave */
+body {
+  font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  background-color: #f5f7fa;
+  color: #333;
+  line-height: 1.6;
+  padding: 10px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+html {
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Títulos con mejor tipografía */
+h1, h2, h3, h4 {
+  color: #2c3e50;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+h1 {
+  font-size: 2.5rem;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+h2 {
+  font-size: 1.8rem;
+  text-align: center;
+  margin-bottom: 30px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+h4 {
+  color: #2c3e50;
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+/* Contenedor principal con sombra más sutil */
+.container {
+  max-width: 100%; /* Cambiado de 1840px a 100% para ocupar todo el ancho */
+  width: 100%;
+  margin: 0 auto; /* Centrado pero sin márgenes laterales */
+  padding: 40px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  overflow-y: auto;
+  max-height: 90vh; /* Aumentado para aprovechar más espacio vertical */
+}
+.p-datatable.p-datatable-sm .p-column-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Reducir el tamaño de los botones en las tablas */
+.p-datatable .p-button.p-button-icon-only {
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Ajustar el espaciado general de la tabla */
+.p-datatable.p-datatable-sm {
+  font-size: 0.85rem;
+  width: 95%;
+  margin: 0 auto;
+}
+
+/* Estilos para DataTable - Nuevo diseño simplificado */
+.p-datatable {
+  font-family: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  width: 100%;
+  margin: 0 auto;
+}
+
+.p-datatable .p-datatable-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem;
+  font-weight: 600;
+  color: #495057;
+}
+.p-datatable .p-datatable-thead > tr > th {
+  background-color: #f8f9fa;
+  color: #495057;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+  text-align: left;
+}
+.p-datatable .p-datatable-tbody > tr {
+  background-color: #ffffff;
+  transition: background-color 0.2s;
+}
+.p-datatable .p-datatable-tbody > tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.p-datatable .p-datatable-tbody > tr:hover {
+  background-color: #e9ecef;
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.p-datatable .p-datatable-tbody > tr:last-child > td {
+  border-bottom: 0 none;
+}
+
+/* Estilos para el paginador */
+.p-paginator {
+  background-color: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.p-paginator .p-paginator-element {
+  margin: 0 0.125rem;
+  min-width: 2.357rem;
+  height: 2.357rem;
+  line-height: 2.357rem;
+  border-radius: 50%;
+  text-align: center;
+  cursor: pointer;
+  color: #ffffff;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.p-paginator .p-paginator-element:not(.p-highlight):not(.p-disabled):hover {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.p-paginator .p-paginator-element.p-highlight {
+  background-color: #dad9d9;
+  color: #000000;
+}
+
+.p-paginator .p-dropdown {
+  margin-left: 0.5rem;
+  height: 2.357rem;
+}
+
+.p-paginator .p-dropdown .p-dropdown-label {
+  padding-right: 0;
+}
+
+/* Estilos para las opciones de filas por página */
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item {
+  padding: 0.5rem 1rem;
+  color: #495057;
+  background-color: #ffffff;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+  background-color: #ffcc25;
+  color: #333333;
+}
+
+/* Estilos para tablas compactas */
+.p-datatable.p-datatable-sm .p-datatable-thead > tr > th,
+.p-datatable.p-datatable-sm .p-datatable-tbody > tr > td {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.p-datatable.p-datatable-sm .p-paginator {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Estilos para los botones de acción en la tabla */
+.p-datatable .p-button.p-button-icon-only {
+  width: 2rem;
+  height: 2rem;
+  padding: 0.5rem;
+}
+.deprati-square-paginator .p-paginator-element {
+  border-radius: 4px !important;
+  min-width: 2.5rem !important;
+  height: 2.5rem !important;
+  text-align: center;
+  cursor: pointer;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  background-color: #ffffff;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.deprati-square-paginator .p-paginator-page.p-highlight {
+  background-color: #0f317a !important; /* Color azul de Deprati */
+  color: #ffffff !important; /* Texto blanco para contraste */
+  border-color: #0f317a !important;
+}
+
+.deprati-square-paginator .p-paginator-element:not(.p-highlight):not(.p-disabled):hover {
+  background-color: #e9ecef;
+  color: #495057;
+}
+/* Estilo para los botones de navegación (anterior, siguiente, etc.) */
+.deprati-square-paginator .p-paginator-first,
+.deprati-square-paginator .p-paginator-prev,
+.deprati-square-paginator .p-paginator-next,
+.deprati-square-paginator .p-paginator-last {
+  background-color: #ffffff;
+  color: #495057;
+  border: 1px solid #dee2e6;
+}
+/* Estilo para el texto de la paginación */
+.deprati-square-paginator .p-paginator-current {
+  color: #495057;
+  margin: 0 0.5rem;
+}
+/* Ajustar el tamaño de los inputs en los filtros de la tabla */
+.p-column-filter-element .p-inputtext,
+.p-column-filter-element .p-dropdown {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+}
+/* Paleta de colores principal */
+:root {
+  --primary-color: #0f317a;
+  --primary-dark: #0c2285;
+  --secondary-color: #ffcc25;
+  --secondary-dark: #ffeb39;
+  --accent-color:#ffcc25;
+  --accent-dark: #ffcc25;
+  --danger-color: #0e0a79;
+  --danger-dark: #222089;
+  --light-color: #1693b3;
+  --dark-color: #2c3e50;
+  --gray-color: #95a5a6;
+}
+
+/* Botones CRUD (Azul) */
+button.crud-button, .btn-crud {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+button.crud-button:hover, .btn-crud:hover {
+  background-color: var(--primary-dark);
+}
+
+/* Botones Generales (Naranja) */
+button.general-button, .btn-general,
+.p-button[icon="pi pi-calendar"], .p-button[icon="pi pi-filter"], .p-button[icon="pi pi-file-excel"],
+button.filter-button, button.report-button, button.calendar-button {
+  background-color: var(--accent-color);
+  color: white;
+}
+
+button.general-button:hover, .btn-general:hover,
+.p-button[icon="pi pi-calendar"]:hover, .p-button[icon="pi pi-filter"]:hover, .p-button[icon="pi pi-file-excel"]:hover,
+button.filter-button:hover, button.report-button:hover, button.calendar-button:hover {
+  background-color: var(--accent-dark);
+}
+
+/* Estilo general de los botones */
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: center;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+button:hover, .btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+button:active, .btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+button:disabled, .btn:disabled {
+  background-color: var(--gray-color);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Botones con diferentes colores */
+button.p-button-success, .btn-success {
+  background-color: var(--secondary-color);
+}
+
+button.p-button-success:hover, .btn-success:hover {
+  background-color: var(--secondary-dark);
+}
+
+button.p-button-danger, .btn-danger {
+  background-color: var(--danger-color);
+}
+
+button.p-button-danger:hover, .btn-danger:hover {
+  background-color: var(--danger-dark);
+}
+
+button.p-button-warning, .btn-warning {
+  background-color: var(--accent-color);
+}
+
+button.p-button-warning:hover, .btn-warning:hover {
+  background-color: var(--accent-dark);
+}
+
+/* Deprati Template - Custom CSS
+   Este archivo contiene estilos específicos para el componente DepratiTemplate.js
+   Todos los selectores usan el prefijo 'deprati-' para evitar conflictos con otros componentes
+*/
+
+/* Layout principal con scroll mejorado */
+.deprati-layout-wrapper {
+  background-color: #f0f4f8;
+  min-height: 100vh;
+  padding: 1.5rem;
+  font-family: 'Roboto', sans-serif;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Tarjeta principal con sombras más profesionales */
+.deprati-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 1.8rem;
+  margin-bottom: 2rem;
+  transition: all 0.3s ease;
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #0c2e67 #f0f4f8;
+}
+
+.deprati-card::-webkit-scrollbar {
+  width: 8px;
+}
+
+.deprati-card::-webkit-scrollbar-track {
+  background: #f0f4f8;
+  border-radius: 10px;
+}
+
+.deprati-card::-webkit-scrollbar-thumb {
+  background-color: #0c2e67;
+  border-radius: 10px;
+  border: 2px solid #f0f4f8;
+}
+
+/* Títulos con mejor tipografía y espaciado */
+.deprati-main-title {
+  color: #0c2e67;
+  font-weight: 700;
+  font-size: 2.2rem;
+  margin-bottom: 1.8rem;
+  text-align: center;
+  letter-spacing: -0.5px;
+  position: relative;
+  padding-bottom: 15px;
+}
+
+.deprati-main-title:after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 4px;
+  background: linear-gradient(90deg, #0c2e67, #3a86ff);
+  border-radius: 2px;
+}
+
+.deprati-section-title {
+  color: #0c2e67;
+  font-weight: 600;
+  font-size: 1.6rem;
+  margin-bottom: 1.2rem;
+  position: relative;
+  display: inline-block;
+}
+
+.deprati-section-title:after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #0c2e67, transparent);
+  border-radius: 2px;
+}
+
+.deprati-title {
+  color: #0c2e67;
+  font-weight: 600;
+  font-size: 1.3rem;
+}
+
+.deprati-form-section-title {
+  color: #0c2e67;
+  font-weight: 600;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 0.8rem;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+}
+
+/* Overlay de carga con animación mejorada */
+.deprati-loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999; /* NO mayor a esto */
+  background-color: rgba(0, 0, 0, 0.6);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.deprati-spinner {
+  width: 80px !important;
+  height: 80px !important;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+.deprati-loading-text {
+  color: white;
+  margin-top: 1.5rem;
+  font-size: 1.3rem;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: fadeInOut 1.5s infinite ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* Toolbar personalizada con mejor diseño */
+.deprati-toolbar {
+  background: linear-gradient(to right, #f8f9fa, #edf2f7);
+  border-radius: 10px;
+  padding: 1.2rem;
+  margin-bottom: 1.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.deprati-toolbar:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.deprati-toolbar-left,
+.deprati-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+/* Botones personalizados con efectos mejorados */
+.deprati-button {
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  padding: 0.6rem 1.2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.deprati-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.deprati-button:active {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+}
+
+.deprati-button:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.4s ease;
+}
+
+.deprati-button:hover:before {
+  left: 100%;
+}
+
+.deprati-button-success {
+  background: linear-gradient(135deg, #38b000, #2d9000) !important;
+  border-color: #38b000 !important;
+}
+
+.deprati-button-danger {
+  background: linear-gradient(135deg, #d90429, #bf0424) !important;
+  border-color: #d90429 !important;
+}
+
+.deprati-button-warning {
+  background: linear-gradient(135deg, #ff9e00, #e08e00) !important;
+  border-color: #ff9e00 !important;
+}
+
+.deprati-button-secondary {
+  background: linear-gradient(135deg, #6c757d, #5a6268) !important;
+  border-color: #6c757d !important;
+}
+
+.deprati-button-apply {
+  background: linear-gradient(135deg, #0c2e67, #0a2554) !important;
+  border-color: #0c2e67 !important;
+}
+
+.deprati-button-clear {
+  background: linear-gradient(135deg, #f3a81efb, #f59518fb) !important;
+  border-color: #f39b28 !important;
+  color: white !important;
+}
+
+.deprati-button-export {
+  background: linear-gradient(135deg, #ffab0ffb, #e49b3dfb) !important;
+  border-color: #f39b28 !important;
+}
+
+.deprati-button-report {
+  background: linear-gradient(135deg,  #ffab0ffb, #e49b3dfb) !important;
+  border-color: #f39b28 !important;
+}
+
+/* Botones de acción en filas con efectos mejorados */
+.deprati-action-button {
+  width: 2.8rem;
+  height: 2.8rem;
+  border-radius: 50% !important;
+  transition: all 0.3s ease;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.deprati-action-button:hover {
+  transform: translateY(-2px) scale(1.1);
+}
+
+
+.deprati-edit-button {
+  color: #0c2e67 !important;
+  border-color: #0c2e67 !important;
+}
+
+.deprati-edit-button:hover {
+  background-color: rgba(12, 46, 103, 0.2) !important;
+  box-shadow: 0 0 0 4px rgba(12, 46, 103, 0.15);
+}
+
+.deprati-delete-button {
+  color: #0c2e67 !important;
+  border-color: #0c2e67 !important;
+}
+
+.deprati-delete-button:hover {
+  background-color: rgba(12, 46, 103, 0.2) !important;
+  box-shadow: 0 0 0 4px rgba(12, 46, 103, 0.15);
+}
+
+/* Tarjeta de filtros con diseño mejorado */
+.deprati-filter-card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  margin-bottom: 1.8rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  border-left: 4px solid #0c3fad;
+}
+
+.deprati-filter-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.deprati-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+/* Inputs personalizados con mejor diseño */
+.deprati-label {
+  color: #495057;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  display: block;
+  transition: all 0.2s ease;
+}
+
+.deprati-input,
+.deprati-dropdown,
+.deprati-calendar {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  padding: 0.7rem 1rem;
+  border: 1px solid #d1d9e6;
+  background-color: #ffffff;
+  color: #000000 !important; /* Texto negro */
+  font-weight: 600;
+}
+
+.deprati-input:hover,
+.deprati-dropdown:hover,
+.deprati-calendar:hover {
+  border-color: #adb5bd;
+  background-color: #ffffff;
+}
+
+.deprati-input:focus,
+.deprati-dropdown:focus,
+.deprati-calendar:focus {
+  border-color: #0c2e67 !important;
+  box-shadow: 0 0 0 0.25rem rgba(12, 46, 103, 0.15) !important;
+  background-color: #fff;
+}
+/* Estilos para los botones del formulario */
+.deprati-form .p-button {
+  transition: all 0.3s ease;
+  font-weight: 600;
+}
+.deprati-form .p-button-secondary {
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+  color: white !important;
+}
+
+.deprati-form .p-button-secondary:hover {
+  background-color: #5a6268 !important;
+  border-color: #5a6268 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.texto-negro-input {
+  color: black !important;
+}
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item {
+  color: #333333 !important;
+  background-color: #ffffff;
+  padding: 0.8rem 1rem;
+  margin: 0;
+  border: 0 none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.deprati-form .p-button-primary,
+.deprati-form .p-button {
+  background-color: #0c2e67 !important;
+  border-color: #0c2e67 !important;
+  color: white !important;
+}
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item:hover {
+  background-color: #f5f7fa !important;
+  color: #0c2e67 !important;
+}
+.deprati-form .p-button-primary:hover,
+.deprati-form .p-button:hover {
+  background-color: #1a3a73 !important;
+  border-color: #1a3a73 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.p-dropdown-panel .p-dropdown-items .p-dropdown-item.p-highlight {
+  background-color: rgba(12, 46, 103, 0.1) !important;
+  color: #0c2e67 !important;
+  font-weight: 600;
+}
+/* Asegurarse que el texto de los inputs numéricos también sea negro */
+.p-inputnumber-input {
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+.p-float-label label {
+  color: #495057 !important;
+  font-weight: 600 !important;
+}
+.p-float-label input:focus ~ label,
+.p-float-label input.p-filled ~ label {
+  color: #0c2e67 !important;
+  font-weight: 600 !important;
+}
+.p-dropdown {
+  font-size: 1.1rem;
+  padding: 0.85rem;
+  height: 3.2rem;
+}
+/* Estilo personalizado para los dropdowns */
+.custom-dropdown.p-dropdown {
+  font-size: 1.05rem;
+  height: 3.2rem;
+  padding: 0 !important; /* padding directo aquí no se necesita */
+}
+
+.custom-dropdown .p-dropdown-label {
+  padding: 0.85rem !important;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.custom-dropdown .p-dropdown-trigger {
+  height: 3.2rem;
+}
+
+.p-dropdown .p-dropdown-label {
+  color: #333333 !important;
+  font-weight: 500;
+  padding: 0.4rem 0.6rem !important;
+  font-size: 0.8rem !important;
+}
+
+.p-dropdown-panel {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d1d9e6;
+}
+
+.p-dropdown-panel .p-dropdown-header {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+  background-color: #f8f9fa;
+}
+
+.p-dropdown-panel .p-dropdown-items {
+  padding: 0.5rem 0;
+}
+
+/* Estilos específicos para el calendario */
+
+.p-calendar .p-inputtext {
+  flex: 1 !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  height: 2rem !important;
+  color: #000000 !important; /* Asegura que el texto sea negro siempre */
+  font-weight: 600 !important; /* Hace el texto más visible con negrita */
+}
+.p-calendar .p-inputtext.p-filled {
+  color: #000000 !important; /* Negro puro para el texto cuando hay fecha seleccionada */
+  font-weight: 700 !important; /* Más negrita para mejor visibilidad */
+  background-color: #ffffff !important; /* Fondo blanco para mejor contraste */
+}
+/* Estilo específico para el placeholder del calendario */
+.p-calendar .p-inputtext::placeholder {
+  color: #252525 !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+/* Estilos para el diálogo de edición */
+.p-dialog .p-dialog-content .p-inputtext,
+.p-dialog .p-dialog-content .p-dropdown-label,
+.p-dialog .p-dialog-content .p-dropdown-item {
+    color: #000000 !important;
+    font-weight: 600 !important;
+}
+/* ... existing code ... */
+.toast-on-top {
+  z-index: 9999 !important;
+}
+
+/* Estilos específicos para el diálogo de edición */
+.p-dialog {
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+}
+
+.p-dialog .p-dialog-header {
+  background: #004AAD !important;
+  color: #ffffff !important;
+  padding: 1.5rem !important;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.p-dialog .p-dialog-title {
+  font-size: 1.25rem !important;
+  font-weight: 600 !important;
+  color: #ffffff !important;
+}
+
+.p-dialog .p-dialog-content {
+  padding: 2rem !important;
+  background: #ffffff !important;
+}
+
+.p-dialog .p-dialog-content label {
+  color: #374151 !important;
+  font-weight: 600 !important;
+  margin-bottom: 0.5rem !important;
+  display: block !important;
+}
+
+.p-dialog .p-dialog-content input,
+.p-dialog .p-dialog-content .p-inputtext,
+.p-dialog .p-dialog-content .p-dropdown,
+.p-dialog .p-dialog-content .p-dropdown-label {
+  width: 100% !important;
+  padding: 0.75rem !important;
+  border: 1px solid #D1D5DB !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 500 !important;
+  margin-bottom: 1rem !important;
+}
+
+.p-dialog .p-dialog-footer {
+  padding: 1.5rem !important;
+  background: #F9FAFB !important;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-top: 1px solid #E5E7EB !important;
+}
+
+/* Estilos para los botones del diálogo */
+.p-dialog .p-dialog-footer .p-button {
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+  margin-right: 0.5rem !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 600 !important;
+}
+
+.p-dialog .p-button-text {
+  color: #ffffff !important;
+}
+
+/* Botón Cancelar */
+.p-dialog .p-dialog-footer button:first-child {
+  background-color: #F59E0B !important;
+  border-color: #F59E0B !important;
+}
+
+/* Botón Guardar */
+.p-dialog .p-dialog-footer button:last-child {
+  background-color: #004AAD !important;
+  border-color: #004AAD !important;
+}
+/* Asegurarse que el texto permanezca negro al enfocar o seleccionar */
+.p-dialog .p-dialog-content input:focus,
+.p-dialog .p-dialog-content .p-inputtext:focus,
+.p-dialog .p-dialog-content .p-dropdown:focus,
+.p-dialog .p-dialog-content .p-dropdown-label:focus,
+.p-dialog .p-dialog-content .p-dropdown-item.p-highlight {
+    color: #000000 !important;
+}
+
+/* Estilo para el texto del placeholder */
+.p-dialog .p-dialog-content input::placeholder,
+.p-dialog .p-dialog-content .p-inputtext::placeholder {
+    color: #666666 !important;
+    font-weight: normal !important;
+}
+
+/* Asegura que el texto sea negro incluso cuando está enfocado o seleccionado */
+.p-dialog .p-dialog-content .p-inputtext:focus,
+.p-dialog .p-dialog-content .p-dropdown-label:focus,
+.p-dialog .p-dialog-content .p-dropdown-item.p-highlight {
+    color: #000000 !important;
+    font-weight: 600 !important;
+}
+
+/* Estilo para el placeholder */
+.p-dialog .p-dialog-content .p-inputtext::placeholder {
+    color: #666666 !important;
+    font-weight: normal !important;
+}
+/* Estilos para los placeholders de todos los componentes de selección */
+.p-dropdown .p-dropdown-label.p-placeholder,
+.p-multiselect .p-multiselect-label.p-placeholder,
+.p-inputtext::placeholder {
+  color: #252525 !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+/* Mejorando el botón del calendario */
+.p-calendar .p-datepicker-trigger {
+  background-color: #ffcc25 !important;
+  border-color: #ffcc25 !important;
+  color: #333333 !important;
+  height: 1rem !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  width: 1rem !important; 
+}
+
+/* Mejorando el contenedor del calendario */
+.p-calendar {
+  display: flex !important;
+  align-items: stretch !important;
+  width: 100% !important;
+}
+
+.p-calendar .p-datepicker-trigger:hover {
+  background-color: #ffeb39 !important;
+  border-color: #ffeb39 !important;
+}
+
+.p-calendar .p-datepicker-trigger .p-button-icon {
+  font-size: 1.2rem;
+  color: #333333 !important;
+}
+
+.p-datepicker {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d1d9e6;
+  padding: 0.5rem;
+}
+
+.p-datepicker .p-datepicker-header {
+  padding: 0.8rem;
+  border-bottom: 1px solid #e9ecef;
+  background-color: #f8f9fa;
+}
+
+.p-datepicker .p-datepicker-title {
+  color: #333333;
+  font-weight: 600;
+}
+
+.p-datepicker table {
+  margin: 0.5rem 0;
+}
+
+.p-datepicker table th {
+  color: #495057;
+  font-weight: 600;
+  padding: 0.5rem;
+}
+
+.p-datepicker table td {
+  padding: 0.2rem;
+}
+
+.p-datepicker table td > span {
+  color: #333333 !important;
+  font-weight: 500;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.p-datepicker table td > span:hover {
+  background-color: #f5f7fa !important;
+  color: #0c2e67 !important;
+}
+
+
+
+.p-datepicker table td.p-datepicker-today > span {
+  background-color: rgba(12, 46, 103, 0.1);
+  color: #0c2e67 !important;
+  font-weight: 600;
+}
+
+/* Modificación para asegurar que el día seleccionado tenga texto negro */
+.p-datepicker table td.p-highlight > span {
+  background-color: #ffcc25 !important;
+  color: #000000 !important; /* Cambiado a negro puro */
+  font-weight: 600;
+}
+
+.p-datepicker .p-datepicker-buttonbar {
+  padding: 0.5rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.p-datepicker .p-monthpicker .p-monthpicker-month,
+.p-datepicker .p-yearpicker .p-yearpicker-year {
+  color: #333333 !important;
+  font-weight: 500;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.p-datepicker .p-monthpicker .p-monthpicker-month:hover,
+.p-datepicker .p-yearpicker .p-yearpicker-year:hover {
+  background-color: #f5f7fa !important;
+  color: #0c2e67 !important;
+}
+
+/* Modificación para asegurar que el mes/año seleccionado tenga texto negro */
+.p-datepicker .p-monthpicker .p-monthpicker-month.p-highlight,
+.p-datepicker .p-yearpicker .p-yearpicker-year.p-highlight {
+  background-color: #ffcc25 !important;
+  color: #000000 !important; /* Cambiado a negro puro */
+  font-weight: 600;
+}
+.deprati-input-number {
+  width: 100%;
+}
+
+.deprati-search-input {
+  min-width: 280px;
+  padding-left: 2.5rem !important;
+  border-radius: 20px !important;
+  background-color: #f8f9fa;
+  transition: all 0.3s ease;
+}
+
+.deprati-search-input:focus {
+  width: 320px;
+  background-color: #fff;
+}
+
+.deprati-search .pi-search {
+  left: 1rem !important;
+  color: #6c757d;
+}
+
+/* Tabla de datos con diseño mejorado */
+.deprati-datatable {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+/* Estilos para la paginación de la tabla */
+.deprati-datatable .p-paginator {
+  background-color: #f8f9fa !important;
+  border-top: 1px solid #e9ecef !important;
+  padding: 1.2rem !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.1rem !important;
+}
+
+.deprati-datatable .p-paginator .p-paginator-element {
+  color: #495057 !important;
+  min-width: 3rem !important;
+  height: 3rem !important;
+  margin: 0 0.3rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  font-size: 1.1rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.deprati-datatable .p-paginator .p-paginator-element:hover {
+  background-color: rgba(12, 46, 103, 0.08) !important;
+  color: #0c2e67 !important;
+  transform: scale(1.05);
+}
+
+.deprati-datatable .p-paginator .p-highlight {
+  background-color: #ffcc25 !important;
+  color: #333333 !important;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.deprati-datatable .p-paginator .p-paginator-pages {
+  display: flex;
+  align-items: center;
+}
+
+.deprati-datatable .p-paginator .p-dropdown {
+  margin-left: 0.8rem;
+  height: 3rem !important;
+  min-width: 5rem !important;
+}
+
+.deprati-datatable .p-paginator .p-dropdown .p-dropdown-label {
+  padding-right: 0;
+  font-weight: 600;
+  font-size: 1.1rem !important;
+}
+
+.deprati-datatable .p-paginator .p-paginator-current {
+  font-size: 1.1rem !important;
+  font-weight: 500;
+  color: #495057;
+  margin: 0 1rem;
+}
+.deprati-datatable:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.deprati-table-header {
+  padding: 1rem 1.5rem;
+  background: linear-gradient(to right, #f8f9fa, #edf2f7);
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.deprati-column {
+  background: linear-gradient(to bottom, #f8f9fa, #edf2f7) !important;
+  color: #0c1267 !important;
+  font-weight: 600 !important;
+  padding: 1rem 0.8rem !important;
+  border-bottom: 2px solid #e9ecef !important;
+}
+
+.deprati-column-numeric {
+  text-align: right !important;
+}
+
+.deprati-column-actions {
+  text-align: center !important;
+}
+
+.deprati-selection-column {
+  width: 3rem;
+}
+
+.deprati-row-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.8rem;
+}
+
+/* Estilos para las filas de la tabla */
+.deprati-datatable .p-datatable-tbody > tr {
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.deprati-datatable .p-datatable-tbody > tr:hover {
+  background-color: rgba(12, 46, 103, 0.05) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.deprati-datatable .p-datatable-tbody > tr > td {
+  padding: 0.8rem !important;
+  vertical-align: middle;
+}
+
+/* Diálogo de edición con diseño mejorado */
+.deprati-edit-dialog {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+.deprati-edit-dialog .p-dialog-header {
+  background: linear-gradient(135deg, #0c2e67, #1a3a73);
+  color: white;
+  padding: 1rem 1.5rem;
+}
+
+.deprati-edit-dialog .p-dialog-title {
+  font-weight: 600;
+  font-size: 1.3rem;
+}
+
+.deprati-edit-dialog .p-dialog-content {
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+* Estilos para el modal de edición */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 12px;
+  padding: 20px;
+  width: 90%;
+  max-width: 1200px; /* Aumentado para permitir más espacio horizontal */
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: fadeIn 0.3s ease;
+}
+
+.modal-content h2 {
+  color: #0c2e67;
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 2px solid #e0e0e0;
+  text-align: left;
+}
+
+.modal-content form {
+  display: flex; /* Cambiado de grid a flex para layout horizontal */
+  flex-wrap: wrap; /* Permite que los elementos se envuelvan si no hay suficiente espacio */
+  gap: 1.2rem;
+}
+
+.modal-content .form-group {
+  flex: 1 1 200px; /* Flex grow, shrink y basis para distribución horizontal */
+  min-width: 200px; /* Ancho mínimo para cada campo */
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content label {
+  color: #495057;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+  padding: 0.7rem 1rem;
+  border: 1px solid #d1d9e6;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.modal-content input:focus,
+.modal-content select:focus,
+.modal-content textarea:focus {
+  border-color: #0c2e67;
+  box-shadow: 0 0 0 0.25rem rgba(12, 46, 103, 0.15);
+  outline: none;
+}
+
+.modal-content .form-actions {
+  width: 100%; /* Ocupa todo el ancho */
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e9ecef;
+}
+
+.modal-content button {
+  padding: 0.7rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-content button[type="submit"] {
+  background-color: #0c2e67;
+  color: white;
+  border: none;
+}
+
+.modal-content button[type="submit"]:hover {
+  background-color: #1a3a73;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.modal-content button[type="button"] {
+  background-color: #f59e0b;
+  color: white;
+  border: none;
+}
+
+.modal-content button[type="button"]:hover {
+  background-color: #fbbf24;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.deprati-form {
+  padding: 1.8rem;
+}
+
+/* Estilo general */
+.deprati-toast {
+  padding: 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  background-color: var(--surface-card);
+  color: var(--text-color);
+}
+
+
+/* Contenido del mensaje: permite alinear texto y botón */
+.p-toast-message-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding-right: 1.25rem;
+  position: relative;
+  overflow: visible; /* permite que el botón 'X' no se corte */
+}
+
+/* Icono de cerrar (X) visible y accesible */
+.p-toast-icon-close {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent !important;
+  color: #333 !important;
+  font-size: 1.2rem !important;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  border-radius: 4px;
+  margin-left: auto;
+  margin-top: 0.15rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+.p-toast-icon-close::before {
+  content: "\e90b"; /* unicode para pi-times */
+  font-family: 'PrimeIcons' !important;
+}
+/* Hover suave */
+.p-toast-icon-close:hover {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Estilo específico para cada tipo */
+.deprati-toast-success {
+  background-color: #d1e7dd !important;
+  color: #0f5132 !important;
+  border-left: 6px solid #198754 !important;
+}
+
+.deprati-toast-info {
+  background-color: #cff4fc !important;
+  color: #055160 !important;
+  border-left: 6px solid #0dcaf0 !important;
+}
+
+.deprati-toast-warning {
+  background-color: #fff3cd !important;
+  color: #664d03 !important;
+  border-left: 6px solid #ffc107 !important;
+}
+
+.deprati-toast-error {
+  background-color: #f8d7da !important;
+  color: #842029 !important;
+  border-left: 6px solid #dc3545 !important;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .deprati-toast {
+    padding: 1rem !important;
+    width: 95vw !important;
+    font-size: 1rem !important;
+  }
+}
+
+
+/* Diálogo de confirmación con diseño mejorado */
+.deprati-confirmation-toast {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.deprati-confirmation-header {
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.deprati-confirmation-message {
+  padding: 1.2rem 0;
+  font-size: 1.1rem;
+}
+
+.deprati-confirmation-actions {
+  padding-top: 0.8rem;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+/* Divider personalizado */
+.deprati-divider {
+  margin: 1.8rem 0;
+  border-color: #e9ecef;
+  position: relative;
+}
+
+.deprati-divider:after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 0;
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, #0c2e67, transparent);
+  border-radius: 2px;
+}
+
+/* Botón de carga de archivos con diseño mejorado */
+.deprati-fileupload-button {
+  background: linear-gradient(135deg, #38b000, #2d9000) !important;
+  border-color: #38b000 !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease;
+}
+
+.deprati-fileupload-button:hover {
+  background: linear-gradient(135deg, #2d9000, #38b000) !important;
+  border-color: #2d9000 !important;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.deprati-fileupload-button .p-button-icon {
+  font-size: 1.2rem;
+}
+
+/* Estilos responsivos mejorados */
+@media screen and (max-width: 1200px) {
+  .deprati-layout-wrapper {
+    padding: 1.2rem;
+  }
+  
+  .deprati-card {
+    padding: 1.5rem;
+  }
+  
+  .deprati-main-title {
+    font-size: 2rem;
+  }
+  
+  .deprati-section-title {
+    font-size: 1.4rem;
+  }
+}
+
+@media screen and (max-width: 992px) {
+  .deprati-layout-wrapper {
+    padding: 1rem;
+  }
+  
+  .deprati-card {
+    padding: 1.2rem;
+  }
+  
+  .deprati-main-title {
+    font-size: 1.8rem;
+  }
+  
+  .deprati-toolbar {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .deprati-toolbar-left,
+  .deprati-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .deprati-search-input {
+    min-width: 220px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .deprati-layout-wrapper {
+    padding: 0.8rem;
+  }
+  
+  .deprati-card {
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .deprati-main-title {
+    font-size: 1.6rem;
+    margin-bottom: 1.2rem;
+  }
+  
+  .deprati-section-title {
+    font-size: 1.3rem;
+  }
+  
+  .deprati-toolbar-left,
+  .deprati-toolbar-right {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  
+  .deprati-button {
+    padding: 8px 15px;
+    border-radius: 4px;
+    border: none;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.blue-button {
+  background-color: #1e3a8a;
+  color: white;
+}
+
+.blue-button:hover {
+  background-color: #2c4999;
+}
+
+.orange-button {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.orange-button:hover {
+  background-color: #fbbf24;
+}
+
+.deprati-action-button {
+  margin: 0 3px;
+}
+
+.deprati-row-actions {
+  display: flex;
+  justify-content: center;
+} 
+  .deprati-search-input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .deprati-filter-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .deprati-filter-actions .deprati-button {
+    width: 100%;
+  }
+  
+  .deprati-table-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .deprati-table-header .deprati-search {
+    width: 100%;
+  }
+  
+  .deprati-table-header .deprati-search-input {
+    width: 100%;
+  }
+  
+  .deprati-edit-dialog {
+    width: 95vw !important;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+  }
+}
+
+@media screen and (max-width: 576px) {
+  .deprati-layout-wrapper {
+    padding: 0.5rem;
+  }
+  
+  .deprati-card {
+    padding: 0.8rem;
+    border-radius: 8px;
+  }
+  
+  .deprati-main-title {
+    font-size: 1.4rem;
+  }
+  
+  .deprati-section-title {
+    font-size: 1.2rem;
+  }
+  
+  .deprati-confirmation-actions {
+    flex-direction: column;
+  }
+  
+  .deprati-confirmation-actions .deprati-button {
+    width: 100%;
+  }
+}
+
+/* Animaciones adicionales para mejorar la experiencia */
+@keyframes slideInUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.deprati-card {
+  animation: slideInUp 0.5s ease;
+}
+
+.deprati-filter-card, .deprati-table-card {
+  animation: slideInUp 0.5s ease;
+  animation-fill-mode: both;
+}
+
+.deprati-filter-card {
+  animation-delay: 0.1s;
+}
+
+.deprati-table-card {
+  animation-delay: 0.2s;
+}
+
+/* Mejoras para el scroll en tablas grandes */
+.deprati-table-card {
+  overflow: hidden;
+  position: relative;
+}
+
+.deprati-datatable .p-datatable-wrapper {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #0c2e67 #f0f4f8;
+}
+
+.deprati-datatable .p-datatable-wrapper::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.deprati-datatable .p-datatable-wrapper::-webkit-scrollbar-track {
+  background: #f0f4f8;
+  border-radius: 10px;
+}
+
+.deprati-datatable .p-datatable-wrapper::-webkit-scrollbar-thumb {
+  background-color: #0c2e67;
+  border-radius: 10px;
+  border: 2px solid #f0f4f8;
+}
+
+/* Botón de eliminar seleccionados */
+.deprati-delete-selected-button {
+  background: linear-gradient(135deg,  #0c2e67, #1a3a73) !important;
+  border-color: #260d81 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.deprati-delete-selected-button:hover {
+  background: linear-gradient(135deg, #163eab, #0f45da) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(217, 4, 41, 0.25);
+}
+
+.deprati-delete-selected-button:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.4s ease;
+}
+
+.deprati-delete-selected-button:hover:before {
+  left: 100%;
+}
+
+/* Botón de importar Excel */
+.deprati-import-excel-button {
+  background: linear-gradient(135deg, #0c2e67, #1a3a73) !important;
+  border-color: #0c2e67 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.deprati-import-excel-button:hover {
+  background: linear-gradient(135deg, #1a3a73, #0c2e67) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(12, 46, 103, 0.25);
+}
+
+.deprati-import-excel-button:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.4s ease;
+}
+
+.deprati-import-excel-button:hover:before {
+  left: 100%;
+}
+
+/* Botón de elegir archivo */
+.deprati-choose-file-button {
+  background: linear-gradient(135deg, #38b000, #2d9000) !important;
+  border-color: #38b000 !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.deprati-choose-file-button:hover {
+  background: linear-gradient(135deg, #2d9000, #38b000) !important;
+  border-color: #2d9000 !important;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(56, 176, 0, 0.25);
+}
+
+.deprati-choose-file-button:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.4s ease;
+}
+
+.deprati-choose-file-button:hover:before {
+  left: 100%;
+}
+
+/* Contenedor para el componente FileUpload */
+.deprati-fileupload {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.deprati-fileupload .p-fileupload-buttonbar {
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.deprati-fileupload .p-fileupload-content {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #ced4da;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.deprati-fileupload .p-fileupload-content:hover {
+  background-color: #edf2f7;
+  border-color: #adb5bd;
+}
+
+.deprati-fileupload .p-fileupload-row {
+  margin-bottom: 0.5rem;
+}
+
+.deprati-fileupload .p-progressbar {
+  height: 0.5rem;
+  border-radius: 4px;
+  background-color: #e9ecef;
+}
+
+.deprati-fileupload .p-progressbar-value {
+  background-color: #38b000;
+  border-radius: 4px;
+}
+
+/* Estilos para el diálogo de confirmación */
+.deprati-confirm-dialog .p-dialog-header {
+  background-color: #1e3a8a;
+  color: white;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding: 1rem;
+}
+
+.deprati-confirm-dialog .p-dialog-content {
+  background-color: white;
+  padding: 2rem;
+  display: flex;
+  align-items: center;
+}
+
+.deprati-confirm-dialog .p-dialog-content .p-confirm-dialog-icon {
+  color: #f59e0b;
+  font-size: 2rem;
+  margin-right: 1rem;
+}
+
+.deprati-confirm-dialog .p-dialog-content .p-confirm-dialog-message {
+  font-size: 1.1rem;
+  color: #374151;
+}
+
+.deprati-confirm-dialog .p-dialog-footer {
+  background-color: #f9fafb;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.deprati-confirm-button {
+  background-color: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 4px !important;
+  transition: background-color 0.3s ease !important;
+}
+
+.deprati-confirm-button:hover {
+  background-color: #b91c1c !important;
+  border-color: #b91c1c !important;
+}
+
+.deprati-cancel-button {
+  background-color: #f59e0b !important;
+  border-color: #f59e0b !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 4px !important;
+  transition: background-color 0.3s ease !important;
+}
+
+.deprati-cancel-button:hover {
+  background-color: #d97706 !important;
+  border-color: #d97706 !important;
+}/* Estilo moderno y limpio para checkboxes PrimeReact */
+.p-checkbox .p-checkbox-box {
+  border: 2px solid #ccc !important;
+  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  background-color: #fff !important;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Checkbox seleccionado */
+.p-checkbox .p-checkbox-box.p-highlight {
+  background-color: #00bcd4 !important;  /* azul celeste */
+  border-color: #00bcd4 !important;
+}
+
+/* Hover visual (sin seleccionar) */
+.p-checkbox .p-checkbox-box:hover {
+  border-color: #00acc1 !important;
+}
+
+/* Icono de check (✓) */
+.p-checkbox-icon {
+  color: rgb(0, 0, 0) !important;
+  font-size: 1rem;
+}
+.p-datatable .p-datatable-tbody > tr.p-highlight {
+  background-color: #e0f7fa !important; /* celeste muy claro */
+  color: inherit;
+}
+
+
+input, .p-inputtext, .p-inputnumber-input {
+  font-size: 1.05rem !important;
+  padding: 0.75rem !important;
+  border-radius: 10px !important;
+}
+.p-float-label label {
+  font-size: 1rem !important;
+}
+.p-dialog-header-icon {
+  display: inline-flex !important;
+  opacity: 1 !important;
+}
+.p-dialog .p-dialog-header-icon {
+  display: none;
+}
+/* Mostrar botón de cerrar y su ícono en el header del dialog */
+.p-dialog .p-dialog-header .p-dialog-header-icon {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: white !important;
+  font-size: 1.2rem;
+  margin-left: auto;
+}
+
+.p-dialog .p-dialog-header .p-dialog-header-icon .pi {
+  color: white !important;
+  font-size: 1.2rem;
+}
+
+

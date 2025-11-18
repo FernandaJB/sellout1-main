@@ -1,0 +1,116 @@
+/* Este archivo proporciona compatibilidad entre los componentes de Fybeca y el CSS de Deprati */
+
+/* Clases específicas para los componentes de Fybeca que necesitan ser compatibles con Deprati */
+.fybeca-container {
+  max-width: 1840px;
+  margin: 40px auto;
+  padding: 40px;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+  overflow-y: auto;
+  max-height: 80vh;
+}
+
+.fybeca-table-container {
+  width: 100%;
+  overflow-x: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.fybeca-form-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.fybeca-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fybeca-form-label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.fybeca-button-container {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+/* Estilos para asegurar que las tablas de Fybeca se vean bien con el CSS de Deprati */
+.fybeca-datatable .p-datatable-wrapper {
+  overflow-x: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.fybeca-datatable .p-datatable-table {
+  min-width: 100%;
+}
+
+.fybeca-datatable .p-datatable-thead > tr > th {
+  background: #dadada;
+  color: #2c3e50;
+  font-weight: 600;
+  padding: 1rem;
+  border-color: #f0f0f0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.fybeca-datatable .p-datatable-tbody > tr > td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.fybeca-datatable .p-datatable-tbody > tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Estilos para los filtros y controles en componentes de Fybeca */
+.fybeca-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.fybeca-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .fybeca-container {
+    padding: 20px;
+    margin: 20px;
+  }
+  
+  .fybeca-filters {
+    flex-direction: column;
+  }
+  
+  .fybeca-actions {
+    flex-direction: column;
+  }
+  
+  .fybeca-datatable .p-datatable-thead > tr > th,
+  .fybeca-datatable .p-datatable-tbody > tr > td {
+    padding: 0.75rem;
+  }
+}
