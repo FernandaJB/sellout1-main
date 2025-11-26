@@ -206,12 +206,13 @@ public class FybecaController {
      * - Devuelve TXT con códigos no encontrados.
      */
     @PostMapping("/subir-archivo-venta")
-    public ResponseEntity<Resource> subirArchivoVentaFlexible(@RequestParam("file") MultipartFile file,
-                                                              @RequestParam(required = false) String codCliente) {
+    public ResponseEntity<Map<String, Object>> subirArchivoVentaFlexible(@RequestParam("file") MultipartFile file,
+                                                                         @RequestParam(required = false) String codCliente) {
         String cod = resolveCodCliente(codCliente);
         logger.info("Inicio de carga de archivo de ventas: {} para codCliente={}", file.getOriginalFilename(), cod);
 
         Set<String> codigosNoEncontrados = new HashSet<>();
+        List<Map<String, Object>> detalleNoEncontrados = new ArrayList<>();
         if (file.isEmpty()) {
             logger.warn("El archivo recibido está vacío.");
             return ResponseEntity.badRequest().build();
@@ -227,7 +228,7 @@ public class FybecaController {
 
             Sheet sheet = workbook.getSheetAt(0);
             Row encabezado = sheet.getRow(0);
-            if (encabezado == null) throw new IllegalArgumentException("❌ La primera fila (encabezados) está vacía.");
+            if (encabezado == null) throw new IllegalArgumentException("La primera fila (encabezados) está vacía.");
 
             Map<String, List<String>> camposEsperados = new HashMap<>();
             camposEsperados.put("anio", List.of("año", "anio", "Año"));
@@ -300,12 +301,20 @@ public class FybecaController {
                         venta.setDescripcion(obtenerValorCelda(row.getCell(columnaPorCampo.get("descripcion")), String.class));
                     if (venta.getCodBarra() == null || venta.getCodBarra().trim().isEmpty()) {
                         logger.warn("⚠️ Fila {}: Código de barra vacío", i + 1);
+                        detalleNoEncontrados.add(Map.of(
+                                "codigo", "CODBARRA_VACIO",
+                                "motivo", "Fila " + (i + 1) + ": Código de barra vacío"
+                        ));
                         continue;
                     }
 
                     boolean datosCargados = fybecaService.cargarDatosDeProducto(clienteCarga, venta, codigosNoEncontrados);
                     if (!datosCargados) {
                         logger.warn("⚠️ Fila {}: No se encontraron datos para el código {}", i + 1, venta.getCodBarra());
+                        detalleNoEncontrados.add(Map.of(
+                                "codigo", Objects.toString(venta.getCodBarra(), "N/D"),
+                                "motivo", "Fila " + (i + 1) + ": No se encontraron datos para el código " + Objects.toString(venta.getCodBarra(), "N/D")
+                        ));
                         continue;
                     }
 
@@ -316,15 +325,18 @@ public class FybecaController {
                 }
             }
 
-            // Devuelve TXT de no encontrados
-            return fybecaService.obtenerArchivoCodigosNoEncontrados(new ArrayList<>(codigosNoEncontrados));
+            Map<String, Object> body = new HashMap<>();
+            body.put("codigosNoEncontrados", detalleNoEncontrados);
+            body.put("filasLeidas", sheet.getLastRowNum());
+            body.put("filasProcesadas", sheet.getLastRowNum());
+            return ResponseEntity.ok(body);
 
         } catch (IOException e) {
             logger.error("❌ Error leyendo archivo Excel: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
             logger.error("❌ Error inesperado al procesar archivo: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", e.getMessage()));
         }
     }
 

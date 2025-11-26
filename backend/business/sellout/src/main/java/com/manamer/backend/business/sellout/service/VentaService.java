@@ -544,7 +544,7 @@ public class VentaService {
                 if (!codBarraExisteEnSap(codBarra)) {
                     incidencias.add(new Incidencia(
                             (codBarra == null || codBarra.isBlank()) ? "CODBARRA_VACIO" : codBarra.trim(),
-                            "CODBARRA no existe en SAP (CG3_360CORP.SAP_Prod).",
+                            "CODBARRA no existe en SAP (cache).",
                             (filaIndex + 1)
                     ));
                     guardarCodigoNoEncontrado(codBarra == null ? "CODBARRA_VACIO" : codBarra.trim());
