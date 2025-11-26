@@ -14,7 +14,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface VentaRepository extends JpaRepository<Venta, Long> {
 
-   @Query(value = "SELECT * FROM SAPHANA..CG3_360CORP.SAP_Prod sapProd WHERE sapProd.CodBarra = :codBarra", nativeQuery = true)
+   @Query(value = "SELECT * FROM SELLOUT.dbo.SAP_Prod_cache sp WHERE sp.cod_barra = :codBarra", nativeQuery = true)
    List<Producto> obtenerProductoPorCodBarra(@Param("codBarra") String codBarra);
 
    default Optional<Producto> obtenerPrimerProductoPorCodBarra(@Param("codBarra") String codBarra) {
@@ -54,7 +54,7 @@ public interface VentaRepository extends JpaRepository<Venta, Long> {
    );
 
    // ===== OPCIONAL: validación directa de existencia en SAP por codBarra =====
-   @Query(value = "SELECT TOP 1 1 FROM SAPHANA..CG3_360CORP.SAP_Prod WHERE CodBarra = :codBarra", nativeQuery = true)
+   @Query(value = "SELECT TOP 1 1 FROM SELLOUT.dbo.SAP_Prod_cache WHERE cod_barra = :codBarra", nativeQuery = true)
    Integer existsSapByCodBarra(@Param("codBarra") String codBarra);
 
    default boolean codBarraExisteEnSap(String codBarra) {

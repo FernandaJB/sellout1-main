@@ -205,9 +205,9 @@ public class VentaService {
                 SELECT TOP 1
                     c.id AS ClienteID, c.cod_Cliente, c.nombre_Cliente, c.ciudad, c.codigo_Proveedor,
                     p.id AS IdProducto, p.cod_Item, p.cod_Barra_Sap,
-                    sp.CodProd, sp.CodBarra, sp.Descripcion, sp.Marca
+                    sp.codigo_sap AS CodProd, sp.cod_barra AS CodBarra, sp.descripcion AS Descripcion, sp.marca AS Marca
                 FROM SELLOUT.dbo.producto p
-                LEFT JOIN SAPHANA..CG3_360CORP.SAP_Prod sp ON sp.CodBarra = p.cod_Barra_Sap
+                LEFT JOIN SELLOUT.dbo.SAP_Prod_cache sp ON sp.cod_barra = p.cod_Barra_Sap
                 CROSS JOIN (SELECT TOP 1 * FROM SELLOUT.dbo.cliente) c
                 WHERE p.cod_Item = :codItem
             """;
@@ -261,11 +261,11 @@ public class VentaService {
                 SELECT TOP 1
                     c.id AS ClienteID, c.cod_Cliente, c.nombre_Cliente, c.ciudad, c.codigo_Proveedor,
                     p.id AS IdProducto, p.cod_Item, p.cod_Barra_Sap,
-                    sp.CodProd, sp.CodBarra, sp.Descripcion, sp.Marca
+                    sp.codigo_sap AS CodProd, sp.cod_barra AS CodBarra, sp.descripcion AS Descripcion, sp.marca AS Marca
                 FROM SELLOUT.dbo.producto p
-                LEFT JOIN SAPHANA..CG3_360CORP.SAP_Prod sp ON sp.CodBarra = p.cod_Barra_Sap
+                LEFT JOIN SELLOUT.dbo.SAP_Prod_cache sp ON sp.cod_barra = p.cod_Barra_Sap
                 JOIN SELLOUT.dbo.cliente c ON c.cod_Cliente = :codCliente
-                WHERE (p.cod_Barra_Sap = :codBarra OR sp.CodBarra = :codBarra OR p.cod_Item = :codBarra)
+                WHERE (p.cod_Barra_Sap = :codBarra OR sp.cod_barra = :codBarra OR p.cod_Item = :codBarra)
             """;
             Query query = entityManager.createNativeQuery(queryStr);
             query.setParameter("codCliente", "MZCL-000009");
@@ -398,7 +398,7 @@ public class VentaService {
             return ventaRepository.codBarraExisteEnSap(codBarra.trim());
         } catch (Throwable ignore) {
             // Opción B: fallback con EntityManager
-            String sql = "SELECT TOP 1 1 FROM SAPHANA..CG3_360CORP.SAP_Prod WHERE CodBarra = :cb";
+            String sql = "SELECT TOP 1 1 FROM SELLOUT.dbo.SAP_Prod_cache WHERE cod_barra = :cb";
             try {
                 Object r = entityManager.createNativeQuery(sql)
                         .setParameter("cb", codBarra.trim())

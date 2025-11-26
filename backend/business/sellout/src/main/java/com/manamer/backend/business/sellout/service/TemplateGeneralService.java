@@ -329,12 +329,12 @@ public class TemplateGeneralService {
                         "fila", rf.excelFila,
                         "codBarra", rf.codBarra,
                         "codPdv", Objects.toString(rf.codPdv, ""),
-                        "motivo", "CODBARRA no existe en SAP (SAP_Prod)."
+                        "motivo", "CODBARRA no existe en SAP (cache)."
                 ));
                 if (rf.codBarra != null && !rf.codBarra.trim().isEmpty()) {
                     codigosNoEncontrados.add(Map.of(
                             "codigo", rf.codBarra,
-                            "motivo", "CODBARRA no existe en SAP (SAP_Prod). Fila: " + rf.excelFila
+                            "motivo", "CODBARRA no existe en SAP (cache). Fila: " + rf.excelFila
                     ));
                 } else {
                     codigosNoEncontrados.add(Map.of(
@@ -509,14 +509,10 @@ public class TemplateGeneralService {
             String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
 
             String sql =
-                "SELECT x.CodBarra, MAX(x.CodProd) AS CodProd \n" +
-                "FROM ( \n" +
-                "  SELECT CONVERT(NVARCHAR(64), p.CodBarra) AS CodBarra, \n" +
-                "         CONVERT(NVARCHAR(64), p.CodProd)  AS CodProd \n" +
-                "  FROM OPENQUERY([SAPHANA], 'SELECT \"CodBarra\", \"CodProd\" FROM \"CG3_360CORP\".\"SAP_Prod\"') p \n" +
-                ") x \n" +
-                "WHERE x.CodBarra IN (" + placeholders + ") \n" +
-                "GROUP BY x.CodBarra";
+                "SELECT p.cod_barra, MAX(p.codigo_sap) AS codigo_sap " +
+                "FROM SELLOUT.dbo.SAP_Prod_cache p " +
+                "WHERE p.cod_barra IN (" + placeholders + ") " +
+                "GROUP BY p.cod_barra";
 
             try {
                 Query q = em.createNativeQuery(sql);
@@ -531,7 +527,7 @@ public class TemplateGeneralService {
                     if (cb != null && cp != null) out.put(cb, cp);
                 }
             } catch (Exception ex) {
-                log.severe("prefetchSapByCodBarra OPENQUERY falló. chunkSize=" +
+                log.severe("prefetchSapByCodBarra cache falló. chunkSize=" +
                            chunk.size() + " | error=" + ex.getMessage());
             } finally {
                 em.clear();

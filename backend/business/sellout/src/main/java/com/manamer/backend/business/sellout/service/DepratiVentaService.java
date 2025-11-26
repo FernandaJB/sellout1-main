@@ -240,8 +240,6 @@ public class DepratiVentaService {
      * Devuelve el mismo mapa de respuesta para que el controller solo delegue.
      */
     public ResponseEntity<Map<String, Object>> procesarArchivoExcelFlexible(MultipartFile file) {
-        long t0 = System.nanoTime(); // ✅ Inicio medición tiempo
-        logger.info("Inicio de carga rápida para archivo Excel...");
         Map<String, Object> respuesta = new HashMap<>();
         if (file.isEmpty()) {
             respuesta.put("mensaje", "❌ El archivo está vacío.");
@@ -255,7 +253,6 @@ public class DepratiVentaService {
         try (Workbook workbook = obtenerWorkbookCorrecto(file)) {
             Sheet sheet = workbook.getSheetAt(0);
             List<Venta> ventas = new ArrayList<>();
-                List<Venta> buffer = new ArrayList<>(10000);  // ✅ Nuevo buffer para carga rápida
 
             Map<Integer, String> codPdvMap = new LinkedHashMap<>();
             Map<Integer, String> pdvMap = new LinkedHashMap<>();
@@ -377,13 +374,7 @@ public class DepratiVentaService {
                         boolean datosCargados = ventaService.cargarDatosDeProductoDeprati(venta, codigosNoEncontrados);
                         if (!datosCargados) continue;
 
-                buffer.add(venta);  // ✅ Cambio: usamos buffer para carga rápida
-                filasProcesadas++;
-                if (buffer.size() >= 10000) {
-                    ventaService.guardarVentas(buffer);  // ✅ Guardado en bloque
-                logger.info("Guardado en bloque de " + buffer.size() + " ventas...");
-                    buffer.clear();
-                }
+                        ventas.add(venta);
                         filasProcesadas++;
                     }
                 }
@@ -395,15 +386,13 @@ public class DepratiVentaService {
                 return ResponseEntity.status(HttpStatus.NO_CONTENT).body(respuesta);
             }
 
+            ventaService.guardarVentas(ventas);
                         for (Venta v : ventas) {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
+            ventaService.guardarVentas(ventas);
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
-            
-            long t1 = System.nanoTime();
-            double segundos = (t1 - t0) / 1_000_000_000.0;
-            logger.info("✅ Proceso completado en " + segundos + " segundos. Filas leídas: " + filasLeidas + ", procesadas: " + filasProcesadas);
             return ResponseEntity.ok(respuesta);
 
         } catch (IOException e) {
@@ -419,8 +408,6 @@ public class DepratiVentaService {
      * Replica la lógica de /subir-archivo-venta del controller (búsqueda dinámica de fila “Tienda”).
      */
     public ResponseEntity<Map<String, Object>> procesarArchivoExcelDeprati(MultipartFile file) {
-        long t0 = System.nanoTime(); // ✅ Inicio medición tiempo
-        logger.info("Inicio de carga rápida para archivo Excel...");
         Map<String, Object> respuesta = new HashMap<>();
         if (file.isEmpty()) {
             respuesta.put("mensaje", "❌ El archivo está vacío.");
@@ -434,7 +421,6 @@ public class DepratiVentaService {
         try (Workbook workbook = obtenerWorkbookCorrecto(file)) {
             Sheet sheet = workbook.getSheetAt(0);
             List<Venta> ventas = new ArrayList<>();
-                List<Venta> buffer = new ArrayList<>(10000);  // ✅ Nuevo buffer para carga rápida
 
             // localizar fila con “Tienda”
             int filaCodPdv = -1;
@@ -545,13 +531,7 @@ public class DepratiVentaService {
                         boolean datosCargados = ventaService.cargarDatosDeProductoDeprati(venta, codigosNoEncontrados);
                         if (!datosCargados) continue;
 
-                buffer.add(venta);  // ✅ Cambio: usamos buffer para carga rápida
-                filasProcesadas++;
-                if (buffer.size() >= 10000) {
-                    ventaService.guardarVentas(buffer);  // ✅ Guardado en bloque
-                logger.info("Guardado en bloque de " + buffer.size() + " ventas...");
-                    buffer.clear();
-                }
+                        ventas.add(venta);
                         filasProcesadas++;
                     }
                 }
@@ -563,17 +543,15 @@ public class DepratiVentaService {
                 return ResponseEntity.status(HttpStatus.NO_CONTENT).body(respuesta);
             }
 
+            ventaService.guardarVentas(ventas);
                         for (Venta v : ventas) {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
+            ventaService.guardarVentas(ventas);
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
-            
-            long t1 = System.nanoTime();
-            double segundos = (t1 - t0) / 1_000_000_000.0;
-            logger.info("✅ Proceso completado en " + segundos + " segundos. Filas leídas: " + filasLeidas + ", procesadas: " + filasProcesadas);
             return ResponseEntity.ok(respuesta);
-            
+
         } catch (IOException e) {
             respuesta.put("mensaje", "❌ Error al procesar el archivo Excel.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(respuesta);

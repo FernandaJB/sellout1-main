@@ -202,12 +202,12 @@ public class FybecaVentaService {
                     p.id            AS IdProducto,
                     p.cod_Item      AS CodItem,
                     p.cod_Barra_Sap AS CodBarraSap,
-                    sp.CodProd      AS CodProd,
-                    sp.CodBarra     AS CodBarra,
-                    sp.Descripcion  AS Descripcion,
-                    sp.Marca        AS Marca
+                    sp.codigo_sap   AS CodProd,
+                    sp.cod_barra    AS CodBarra,
+                    sp.descripcion  AS Descripcion,
+                    sp.marca        AS Marca
                 FROM SELLOUT.dbo.producto p
-                LEFT JOIN SAPHANA..CG3_360CORP.SAP_Prod sp ON sp.CodBarra = p.cod_Barra_Sap
+                LEFT JOIN SELLOUT.dbo.SAP_Prod_cache sp ON sp.cod_barra = p.cod_Barra_Sap
                 WHERE (p.cod_Item = :codigo OR p.cod_Barra_Sap = :codigo)
             """;
             Query q = entityManager.createNativeQuery(sql);
