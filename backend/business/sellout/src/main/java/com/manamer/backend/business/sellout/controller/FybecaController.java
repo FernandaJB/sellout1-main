@@ -133,12 +133,18 @@ public class FybecaController {
 
     // ---------- Ventas ----------
 
-    /** Lista ventas — acepta ?codCliente=..., default MZCL-000014 */
     @GetMapping("/venta")
-    public ResponseEntity<List<Venta>> obtenerTodasLasVentas(@RequestParam(required = false) String codCliente) {
+    public ResponseEntity<?> obtenerVentasRapidas(
+            @RequestParam(required = false) String codCliente,
+            @RequestParam(required = false) Integer anio,
+            @RequestParam(required = false) Integer mes,
+            @RequestParam(required = false) String marca,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer offset
+    ) {
         String cod = resolveCodCliente(codCliente);
-        List<Venta> ventas = fybecaService.obtenerTodasLasVentasPorCodCliente(cod);
-        return ResponseEntity.ok(ventas);
+        List<Map<String, Object>> res = fybecaService.obtenerVentasResumen(cod, anio, mes, marca, limit, offset);
+        return ResponseEntity.ok(res);
     }
 
     /** Obtener por id — acepta ?codCliente=... */

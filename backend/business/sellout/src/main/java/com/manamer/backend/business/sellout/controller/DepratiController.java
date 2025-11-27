@@ -136,8 +136,15 @@ public class DepratiController {
 
     // ===================== VENTAS (SIN CAMBIOS) =====================
     @GetMapping("/venta")
-    public ResponseEntity<List<Venta>> obtenerTodasLasVentas() {
-        return ResponseEntity.ok(depratiVentaService.obtenerTodasLasVentasDeprati());
+    public ResponseEntity<?> obtenerVentasRapidas(@RequestParam(required = false) String codCliente,
+                                                  @RequestParam(required = false) Integer anio,
+                                                  @RequestParam(required = false) Integer mes,
+                                                  @RequestParam(required = false) String marca,
+                                                  @RequestParam(required = false) Integer limit,
+                                                  @RequestParam(required = false) Integer offset) {
+        String cod = resolveCodCliente(codCliente);
+        List<Map<String, Object>> ventas = ventaService.obtenerVentasResumen(cod, anio, mes, marca, limit, offset);
+        return ResponseEntity.ok(ventas);
     }
 
     @GetMapping("/venta/{id}")

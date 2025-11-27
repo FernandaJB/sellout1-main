@@ -48,15 +48,21 @@ public class TemplateGeneralController {
     // ===================== Ventas (CRUD básico) =====================
 
     @GetMapping("/venta")
-    public ResponseEntity<?> obtenerTodasLasVentas(HttpServletRequest req) {
+    public ResponseEntity<?> obtenerVentasRapidas(@RequestParam(required = false) String codCliente,
+                                                  @RequestParam(required = false) Integer anio,
+                                                  @RequestParam(required = false) Integer mes,
+                                                  @RequestParam(required = false) String marca,
+                                                  @RequestParam(required = false) Integer limit,
+                                                  @RequestParam(required = false) Integer offset,
+                                                  HttpServletRequest req) {
         String cid = corrId();
         try {
-            List<Venta> ventas = ventaService.obtenerTodasLasVentas();
+            List<Map<String, Object>> ventas = ventaService.obtenerVentasResumen(codCliente, anio, mes, marca, limit, offset);
             return ResponseEntity.ok()
                     .header("X-Correlation-Id", cid)
                     .body(ventas);
         } catch (Exception e) {
-            logger.error("[{}] Error al obtener ventas: {}", cid, e.getMessage(), e);
+            logger.error("[{}] Error al obtener ventas rápidas: {}", cid, e.getMessage(), e);
             return error(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudieron cargar las ventas.",
                     e.getMessage(), req.getRequestURI(), cid);
         }

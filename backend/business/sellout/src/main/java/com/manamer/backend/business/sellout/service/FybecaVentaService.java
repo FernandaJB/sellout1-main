@@ -62,9 +62,64 @@ public class FybecaVentaService {
                 .getResultList();
     }
 
-    /** Wrapper: mantiene compatibilidad para el default (MZCL-000014) */
+    /** Wrapper: compatibilidad para el default (MZCL-000014) */
     public List<Venta> obtenerTodasLasVentasFybeca() {
         return obtenerTodasLasVentasPorCodCliente(DEFAULT_COD_CLIENTE);
+    }
+
+    public List<Map<String, Object>> obtenerVentasResumen(
+            String codCliente,
+            Integer anio,
+            Integer mes,
+            String marca,
+            Integer limit,
+            Integer offset
+    ) {
+        if (limit == null || limit <= 0) limit = 1000;
+        if (offset == null || offset < 0) offset = 0;
+        StringBuilder sql = new StringBuilder();
+        sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad ")
+           .append("FROM [SELLOUT].[dbo].[venta] v ")
+           .append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ")
+           .append("WHERE c.cod_Cliente = :cod ");
+        if (anio != null) sql.append("AND v.anio = :anio ");
+        if (mes != null) sql.append("AND v.mes = :mes ");
+        if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
+        sql.append("ORDER BY v.anio DESC, v.mes DESC, v.id DESC ")
+           .append("OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY");
+
+        Query q = entityManager.createNativeQuery(sql.toString());
+        q.setParameter("cod", codCliente);
+        if (anio != null) q.setParameter("anio", anio);
+        if (mes != null) q.setParameter("mes", mes);
+        if (marca != null && !marca.isBlank()) q.setParameter("marca", marca);
+        q.setParameter("offset", offset);
+        q.setParameter("limit", limit);
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = q.getResultList();
+        List<Map<String, Object>> out = new ArrayList<>(rows.size());
+        for (Object[] r : rows) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", r[0]);
+            m.put("anio", r[1]);
+            m.put("mes", r[2]);
+            m.put("dia", r[3]);
+            m.put("marca", r[4]);
+            m.put("nombreProducto", r[5]);
+            m.put("codBarra", r[6]);
+            m.put("codigoSap", r[7]);
+            m.put("descripcion", r[8]);
+            m.put("codPdv", r[9]);
+            m.put("pdv", r[10]);
+            m.put("ciudad", r[11]);
+            m.put("stockDolares", r[12]);
+            m.put("stockUnidades", r[13]);
+            m.put("ventaDolares", r[14]);
+            m.put("ventaUnidad", r[15]);
+            out.add(m);
+        }
+        return out;
     }
 
     /** Genérico: obtener una venta por id y codCliente */

@@ -325,6 +325,7 @@ const Fybeca = () => {
   const [editVenta, setEditVenta] = useState(null);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [ultimoNoEncontrados, setUltimoNoEncontrados] = useState([]);
 
   // Timers upload
   const [uploadRemainingMs, setUploadRemainingMs] = useState(null);
@@ -431,14 +432,17 @@ const Fybeca = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const { data } = await apiFetch(`/venta?codCliente=${encodeURIComponent(COD_CLIENTE_FIJO)}`);
+      const limit = paginatorState?.rows || 50;
+      const offset = paginatorState?.first || 0;
+      const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(limit), offset: String(offset) });
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = (Array.isArray(data) ? data : []).map((v) =>
         v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
       );
       list._fromApi = true;
       setVentas(list);
       setVentasBase(list);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: list.length }));
+      setPaginatorState((p) => ({ ...p, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: list.length }));
     } catch (e) {
       showError("Error al cargar ventas");
       setVentas([]);
@@ -507,12 +511,17 @@ const Fybeca = () => {
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const qs = buildQuery(f);
-      const { data } = await apiFetch(`/venta?${qs}`);
+      const limit = paginatorState?.rows || 50;
+      const offset = paginatorState?.first || 0;
+      const qsBase = buildQuery(f);
+      const qs = qsBase ? new URLSearchParams(qsBase) : new URLSearchParams();
+      qs.set("limit", String(limit));
+      qs.set("offset", String(offset));
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
+      setPaginatorState((prev) => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: list.length }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
     } catch (e) {
       const filteredData = filterLocalData(ventasBase, f);
@@ -570,7 +579,29 @@ const Fybeca = () => {
     };
   }, [loadingTemplate]);
 
-  const onPageChange = (e) => setPaginatorState(e);
+  const onPageChange = async (e) => {
+    setPaginatorState(e);
+    const limit = e?.rows || paginatorState?.rows || 50;
+    const offset = e?.first || paginatorState?.first || 0;
+    const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(limit), offset: String(offset) });
+    if (hasAnyApplied) {
+      await fetchVentasWithFilters(appliedFilters);
+    } else {
+      setLoadingVentas(true);
+      try {
+        const { data } = await apiFetch(`/venta?${qs.toString()}`);
+        const list = (Array.isArray(data) ? data : []).map((v) =>
+          v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
+        );
+        list._fromApi = true;
+        setVentas(list);
+      } catch {
+        showError("Error al cambiar de página");
+      } finally {
+        setLoadingVentas(false);
+      }
+    }
+  };
 
   // ===== Filtros + búsqueda global =====
   const filteredData = useMemo(() => {
@@ -696,6 +727,7 @@ const Fybeca = () => {
       } else if (contentType.includes("application/json")) {
         const result = await res.json();
         erroresNormalizados = normalizeErrores(result);
+        setUltimoNoEncontrados(erroresNormalizados);
         const cnt = extractCounts(result);
         counts = { ...counts, ...cnt };
         if (toast.current) toast.current.clear();
@@ -1091,6 +1123,19 @@ const Fybeca = () => {
         className="p-button-success p-button-raised"
         onClick={downloadFilteredVentasReport}
         disabled={!filteredData.length}
+      />
+      <Button
+        label="Guardar TXT (No encontrados)"
+        icon="pi pi-save"
+        className="p-button-raised p-button-help"
+        disabled={!ultimoNoEncontrados || ultimoNoEncontrados.length === 0}
+        onClick={async () => {
+          const contenido = buildTxtFromErrores(ultimoNoEncontrados);
+          const now = new Date();
+          const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
+          await saveTextFile(contenido, `codigos_no_encontrados_${fechaStr}.txt`);
+          showSuccess("Archivo guardado correctamente");
+        }}
       />
     </div>
   );

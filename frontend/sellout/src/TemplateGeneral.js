@@ -571,10 +571,14 @@ const TemplateGeneral = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const { data } = await apiFetch("/venta");
+      const limit = paginatorState?.rows || 50;
+      const offset = paginatorState?.first || 0;
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
       setVentas(list);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
+      setPaginatorState((p) => ({ ...p, first: offset, rows: limit, page: Math.floor(offset / limit) }));
     } catch (e) {
       showError("Error al cargar ventas");
       setVentas([]);
@@ -634,11 +638,17 @@ const TemplateGeneral = () => {
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const qs = buildQuery(f);
-      const { data } = await apiFetch(`/venta?${qs}`);
+      const limit = paginatorState?.rows || 50;
+      const offset = paginatorState?.first || 0;
+      const qsBase = buildQuery(f);
+      const qs = qsBase ? new URLSearchParams(qsBase) : new URLSearchParams();
+      qs.set("limit", String(limit));
+      qs.set("offset", String(offset));
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0 }));
+      setPaginatorState((prev) => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit) }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
     } catch (e) {
       console.error(e);
@@ -662,7 +672,27 @@ const TemplateGeneral = () => {
     setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
   }, [appliedFilters, globalFilter]);
 
-  const onPageChange = (e) => setPaginatorState(e);
+  const onPageChange = async (e) => {
+    setPaginatorState(e);
+    const limit = e?.rows || paginatorState?.rows || 50;
+    const offset = e?.first || paginatorState?.first || 0;
+    if (hasAnyApplied) {
+      await fetchVentasWithFilters(appliedFilters);
+    } else {
+      setLoadingVentas(true);
+      try {
+        const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        const { data } = await apiFetch(`/venta?${qs.toString()}`);
+        const list = Array.isArray(data) ? data : [];
+        list._fromApi = true;
+        setVentas(list);
+      } catch (err) {
+        showError("Error al cambiar de página");
+      } finally {
+        setLoadingVentas(false);
+      }
+    }
+  };
 
   const filteredData = useMemo(() => {
     let base = [...ventas];

@@ -241,6 +241,7 @@ public class DepratiVentaService {
      */
     public ResponseEntity<Map<String, Object>> procesarArchivoExcelFlexible(MultipartFile file) {
         Map<String, Object> respuesta = new HashMap<>();
+        logger.info("DepratiFlexible: inicio procesamiento archivo=" + file.getOriginalFilename() + " bytes=" + file.getSize());
         if (file.isEmpty()) {
             respuesta.put("mensaje", "❌ El archivo está vacío.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(respuesta);
@@ -272,6 +273,7 @@ public class DepratiVentaService {
                     pdvMap.put(col, pdv);
                 }
             }
+            logger.info("DepratiFlexible: PDV detectados=" + codPdvMap.size());
 
             Row encabezado = sheet.getRow(27);
             if (encabezado == null) {
@@ -296,6 +298,7 @@ public class DepratiVentaService {
                     }
                 }
             }
+            logger.info("DepratiFlexible: columnas mapeadas=" + columnaPorCampo);
 
             for (String campo : camposEsperados.keySet()) {
                 if (!columnaPorCampo.containsKey(campo)) {
@@ -376,6 +379,11 @@ public class DepratiVentaService {
 
                         ventas.add(venta);
                         filasProcesadas++;
+                        if (ventas.size() >= 1000) {
+                            logger.info("DepratiFlexible: guardando lote ventas size=" + ventas.size());
+                            ventaService.guardarVentas(ventas);
+                            ventas.clear();
+                        }
                     }
                 }
             }
@@ -386,11 +394,13 @@ public class DepratiVentaService {
                 return ResponseEntity.status(HttpStatus.NO_CONTENT).body(respuesta);
             }
 
+            logger.info("DepratiFlexible: guardando remanente ventas size=" + ventas.size());
             ventaService.guardarVentas(ventas);
-                        for (Venta v : ventas) {
+            for (Venta v : ventas) {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
             ventaService.guardarVentas(ventas);
+            logger.info("DepratiFlexible: fin procesamiento filasLeidas=" + filasLeidas + " procesadas=" + filasProcesadas + " noEncontrados=" + codigosNoEncontrados.size());
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
             return ResponseEntity.ok(respuesta);
@@ -409,6 +419,7 @@ public class DepratiVentaService {
      */
     public ResponseEntity<Map<String, Object>> procesarArchivoExcelDeprati(MultipartFile file) {
         Map<String, Object> respuesta = new HashMap<>();
+        logger.info("Deprati: inicio procesamiento archivo=" + file.getOriginalFilename() + " bytes=" + file.getSize());
         if (file.isEmpty()) {
             respuesta.put("mensaje", "❌ El archivo está vacío.");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(respuesta);
@@ -435,6 +446,7 @@ public class DepratiVentaService {
                 }
                 if (filaCodPdv != -1) break;
             }
+            logger.info("Deprati: fila 'Tienda' localizada en=" + filaCodPdv);
             if (filaCodPdv == -1) {
                 respuesta.put("mensaje", "❌ No se encontró una fila con celdas que contengan 'Tienda'.");
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(respuesta);
@@ -458,6 +470,7 @@ public class DepratiVentaService {
                     pdvMap.put(col, pdv);
                 }
             }
+            logger.info("Deprati: PDV detectados=" + codPdvMap.size());
 
             for (int i = 29; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
@@ -543,11 +556,13 @@ public class DepratiVentaService {
                 return ResponseEntity.status(HttpStatus.NO_CONTENT).body(respuesta);
             }
 
+            logger.info("Deprati: guardando remanente ventas size=" + ventas.size());
             ventaService.guardarVentas(ventas);
-                        for (Venta v : ventas) {
+            for (Venta v : ventas) {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
             ventaService.guardarVentas(ventas);
+            logger.info("Deprati: fin procesamiento filasLeidas=" + filasLeidas + " procesadas=" + filasProcesadas + " noEncontrados=" + codigosNoEncontrados.size());
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
             return ResponseEntity.ok(respuesta);

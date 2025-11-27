@@ -34,6 +34,7 @@ const Deprati = () => {
   const [selectedVentas, setSelectedVentas] = useState([]);
   const [editVenta, setEditVenta] = useState(null);
   const toast = useRef(null);
+  const [ultimoNoEncontrados, setUltimoNoEncontrados] = useState([]);
 
   // Carga/overlay/tiempos
   const [loadingTemplate, setLoadingTemplate] = useState(false);
@@ -95,7 +96,29 @@ const Deprati = () => {
     }));
   }, [filteredVentas]);
 
-  const onPageChange = (event) => setPaginatorState(event);
+  const onPageChange = async (event) => {
+    setPaginatorState(event);
+    const limit = event?.rows || paginatorState?.rows || 10;
+    const offset = event?.first || paginatorState?.first || 0;
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    setLoadingVentas(true);
+    try {
+      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
+      if (!res.ok) throw new Error("Error al paginar ventas");
+      const data = await res.json();
+      const processed = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+      processed._fromApi = true;
+      if (filteredVentas && filteredVentas._fromApi) {
+        setFilteredVentas(processed);
+      } else {
+        setVentas(processed);
+      }
+    } catch (e) {
+      showError("Error al cambiar de página");
+    } finally {
+      setLoadingVentas(false);
+    }
+  };
 
   // Años/meses
   const years = useMemo(() => [...new Set(ventas.map(v => v.anio))].sort(), [ventas]);
@@ -133,12 +156,17 @@ const Deprati = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const res = await fetch("/api-sellout/deprati/venta");
+      const limit = paginatorState?.rows || 10;
+      const offset = paginatorState?.first || 0;
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
       if (!res.ok) throw new Error("Error al cargar ventas");
       const data = await res.json();
       const processed = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+      processed._fromApi = true;
       setVentas(processed);
-      // No mostramos datos hasta aplicar un filtro
+      setFilteredVentas([]);
+      setPaginatorState(prev => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: processed.length }));
     } catch (e) {
       console.error(e);
       showError("Error al cargar ventas");
@@ -159,6 +187,14 @@ const Deprati = () => {
     if (Array.isArray(result)) return result.map(toPair);
     if (Array.isArray(result?.lista)) return result.lista.map(c => ({ codigo: String(c), motivo: result?.motivo ?? "Motivo no especificado" }));
     return [];
+  };
+
+  const buildTxtNoEncontrados = (errores) => {
+    const lines = ["CODIGOS_NO_ENCONTRADOS"];
+    errores.forEach(({ codigo, motivo }) => {
+      lines.push(`(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`);
+    });
+    return lines.join("\n");
   };
 
   // Posibles códigos exitosos si el backend los enviara
@@ -378,6 +414,7 @@ const Deprati = () => {
 
       const errores = normalizeErrores(result);
       const exitos = normalizeExitos(result);
+      setUltimoNoEncontrados(errores);
 
       // Métricas (intenta leer del backend si existen)
       const filasLeidas = result?.filasLeidas ?? result?.rowsRead ?? result?.totalLeidas ?? null;
@@ -457,16 +494,43 @@ const Deprati = () => {
   };
 
   // ==== Filtros ====
-  const handleApplyFilters = () => {
-    const filtered = ventas.filter(v => (
-      (filterYear ? parseInt(filterYear) === v.anio : true) &&
-      (filterMonth ? parseInt(filterMonth) === v.mes : true) &&
-      (filterMarca ? (v.marca && v.marca.toLowerCase() === filterMarca.toLowerCase()) : true) &&
-      (filterDate ? (new Date(v.anio, v.mes - 1, v.dia).toDateString() === new Date(filterDate).toDateString()) : true)
-    ));
-    setFilteredVentas(filtered);
-    if (filterYear || filterMonth || filterMarca || filterDate) {
-      showInfo(`Se encontraron ${filtered.length} registros con los filtros aplicados`);
+  const handleApplyFilters = async () => {
+    const limit = paginatorState?.rows || 10;
+    const offset = 0;
+    const qs = new URLSearchParams();
+    if (filterYear) qs.set("anio", String(parseInt(filterYear)));
+    if (filterMonth) qs.set("mes", String(parseInt(filterMonth)));
+    if (filterMarca) qs.set("marca", filterMarca);
+    if (filterDate) {
+      const d = new Date(filterDate);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      qs.set("fecha", `${yyyy}-${mm}-${dd}`);
+    }
+    qs.set("limit", String(limit));
+    qs.set("offset", String(offset));
+    setLoadingVentas(true);
+    try {
+      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
+      if (!res.ok) throw new Error("Error al filtrar ventas");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
+      setFilteredVentas(list);
+      setPaginatorState(prev => ({ ...prev, first: offset, rows: limit, page: 0, totalRecords: list.length }));
+      showInfo(`Se encontraron ${list.length} registros con los filtros aplicados`);
+    } catch (e) {
+      const filtered = ventas.filter(v => (
+        (filterYear ? parseInt(filterYear) === v.anio : true) &&
+        (filterMonth ? parseInt(filterMonth) === v.mes : true) &&
+        (filterMarca ? (v.marca && v.marca.toLowerCase() === filterMarca.toLowerCase()) : true) &&
+        (filterDate ? (new Date(v.anio, v.mes - 1, v.dia).toDateString() === new Date(filterDate).toDateString()) : true)
+      ));
+      setFilteredVentas(filtered);
+      showWarn("No se pudo conectar a la API. Aplicando filtros localmente...");
+    } finally {
+      setLoadingVentas(false);
     }
   };
 
@@ -657,6 +721,18 @@ const Deprati = () => {
         className="deprati-button deprati-delete-selected-button"
         disabled={!selectedVentas.length}
         onClick={handleDeleteSelected}
+      />
+      <Button
+        label="Guardar TXT (No encontrados)"
+        icon="pi pi-save"
+        className="p-button-raised p-button-help"
+        disabled={!ultimoNoEncontrados || ultimoNoEncontrados.length === 0}
+        onClick={async () => {
+          const contenido = buildTxtNoEncontrados(ultimoNoEncontrados);
+          const now = new Date();
+          const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
+          await saveTxt(`codigos_no_encontrados_${fechaStr}.txt`, contenido);
+        }}
       />
     </div>
   );
