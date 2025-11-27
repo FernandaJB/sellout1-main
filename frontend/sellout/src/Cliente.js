@@ -38,7 +38,7 @@ function sortArray(arr, sortStr = "id,asc") {
   return copy;
 }
 
-const API_BASE = "/api/clientes/empresas";
+const API_BASE = "/api-sellout/clientes/empresas";
 
 const Cliente = () => {
   const toast = useRef(null);
