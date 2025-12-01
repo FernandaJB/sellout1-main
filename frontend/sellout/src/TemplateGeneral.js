@@ -992,6 +992,8 @@ const TemplateGeneral = () => {
       "Mes": monthLabel(v.mes),
       "Día": v.dia,
       "Marca": v.marca,
+      "Cliente": v.codCliente || (v.cliente ? v.cliente.codCliente : "N/A"),
+      "Nombre Cliente": v.nombreCliente || (v.cliente ? v.cliente.nombreCliente : "N/A"),
       "Código Barra": v.codBarra,
       "Código SAP": v.codigoSap,
       "Producto": v.nombreProducto,
@@ -1005,7 +1007,7 @@ const TemplateGeneral = () => {
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
-    const numCols = ["J", "K", "L", "M"];
+    const numCols = ["M", "N", "O", "P"];
     for (let i = 2; i <= exportData.length + 1; i++) {
       numCols.forEach((col) => {
         const cell = ws[`${col}${i}`];

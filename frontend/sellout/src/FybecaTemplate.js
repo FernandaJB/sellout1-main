@@ -956,6 +956,8 @@ const Fybeca = () => {
       "Mes": monthLabel(v.mes),
       "Día": v.dia,
       "Marca": v.marca || v?.producto?.marca,
+      "Cliente": v.codCliente || (v.cliente ? v.cliente.codCliente : COD_CLIENTE_FIJO),
+      "Nombre Cliente": v.nombreCliente || (v.cliente ? v.cliente.nombreCliente : "N/A"),
       "Código Barra": v.codBarra,
       "Código SAP": v.codigoSap,
       "Producto": v.nombreProducto,

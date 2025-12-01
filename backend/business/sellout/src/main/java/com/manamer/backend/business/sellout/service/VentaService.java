@@ -744,11 +744,9 @@ public class VentaService {
         if (limit == null || limit <= 0) limit = 1000;
         if (offset == null || offset < 0) offset = 0;
         StringBuilder sql = new StringBuilder();
-        sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad ")
-           .append("FROM [SELLOUT].[dbo].[venta] v ");
-        if (codCliente != null && !codCliente.trim().isEmpty()) {
-            sql.append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ");
-        }
+        sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad, c.cod_Cliente, c.nombre_Cliente ")
+           .append("FROM [SELLOUT].[dbo].[venta] v ")
+           .append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ");
         sql.append("WHERE 1=1 ");
         if (codCliente != null && !codCliente.trim().isEmpty()) sql.append("AND c.cod_Cliente = :cod ");
         if (anio != null) sql.append("AND v.anio = :anio ");
@@ -786,6 +784,8 @@ public class VentaService {
             m.put("stockUnidades", r[13]);
             m.put("ventaDolares", r[14]);
             m.put("ventaUnidad", r[15]);
+            m.put("codCliente", r[16]);
+            m.put("nombreCliente", r[17]);
             out.add(m);
         }
         return out;

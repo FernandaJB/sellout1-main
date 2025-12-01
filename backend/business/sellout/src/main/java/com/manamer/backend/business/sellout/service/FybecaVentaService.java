@@ -78,7 +78,7 @@ public class FybecaVentaService {
         if (limit == null || limit <= 0) limit = 1000;
         if (offset == null || offset < 0) offset = 0;
         StringBuilder sql = new StringBuilder();
-        sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad ")
+        sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad, c.cod_Cliente, c.nombre_Cliente ")
            .append("FROM [SELLOUT].[dbo].[venta] v ")
            .append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ")
            .append("WHERE c.cod_Cliente = :cod ");
@@ -117,6 +117,8 @@ public class FybecaVentaService {
             m.put("stockUnidades", r[13]);
             m.put("ventaDolares", r[14]);
             m.put("ventaUnidad", r[15]);
+            m.put("codCliente", r[16]);
+            m.put("nombreCliente", r[17]);
             out.add(m);
         }
         return out;

@@ -615,6 +615,8 @@ const Deprati = () => {
       'Mes': item.mes,
       'Día': item.dia,
       'Marca': item.marca,
+      'Cliente': item.codCliente || (item.cliente ? item.cliente.codCliente : 'N/A'),
+      'Nombre Cliente': item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : 'N/A'),
       'Código PDV': item.codPdv,
       'PDV': item.pdv,
       'Ciudad': item.ciudad,
@@ -625,7 +627,7 @@ const Deprati = () => {
       'Venta ($)': item.ventaDolares,
       'Venta (U)': item.ventaUnidad
     })));
-    const numberColumns = ['J','K','L','M'];
+    const numberColumns = ['L','M','N','O'];
     for (let i = 2; i <= filteredVentas.length + 1; i++) {
       numberColumns.forEach(col => {
         const cell = ws[`${col}${i}`];
@@ -647,13 +649,15 @@ const Deprati = () => {
     }
     const exportData = filteredVentas.map(item => ({
       'Año': item.anio, 'Mes': item.mes, 'Día': item.dia, 'Marca': item.marca,
+      'Cliente': item.codCliente || (item.cliente ? item.cliente.codCliente : 'N/A'),
+      'Nombre Cliente': item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : 'N/A'),
       'Código PDV': item.codPdv, 'PDV': item.pdv, 'Ciudad': item.ciudad,
       'Producto': item.nombreProducto, 'Código Barra': item.codBarra,
       'Stock ($)': item.stockDolares, 'Stock (U)': item.stockUnidades,
       'Venta ($)': item.ventaDolares, 'Venta (U)': item.ventaUnidad
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
-    const numberColumns = ['J','K','L','M'];
+    const numberColumns = ['L','M','N','O'];
     for (let i = 2; i <= exportData.length + 1; i++) {
       numberColumns.forEach(col => {
         const ref = `${col}${i}`;
