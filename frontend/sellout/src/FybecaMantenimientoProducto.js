@@ -7,6 +7,9 @@ import { DataTable } from "primereact/datatable";
 import { Column } from "primereact/column";
 import { Button } from "primereact/button";
 import { InputText } from "primereact/inputtext";
+import { Dropdown } from "primereact/dropdown";
+import { Calendar } from "primereact/calendar";
+import { InputNumber } from "primereact/inputnumber";
 import { Dialog } from "primereact/dialog";
 import { ProgressSpinner } from "primereact/progressspinner";
 import "primereact/resources/themes/lara-light-indigo/theme.css";
@@ -84,6 +87,11 @@ const FybecaMantenimientoProducto = () => {
   const [error, setError] = useState(null);
 
   const [globalFilter, setGlobalFilter] = useState("");
+  const [filterYear, setFilterYear] = useState(null);
+  const [filterMonth, setFilterMonth] = useState(null);
+  const [filterDay, setFilterDay] = useState(null);
+  const [filterMarca, setFilterMarca] = useState("");
+  const [filterDateRange, setFilterDateRange] = useState(null);
 
   // 🔹 Selección tipo Fybeca: IDs, no objetos
   const [selectedProductos, setSelectedProductos] = useState([]);
@@ -94,7 +102,7 @@ const FybecaMantenimientoProducto = () => {
 
   const [paginatorState, setPaginatorState] = useState({
     first: 0,
-    rows: 10,
+    rows: 50,
     totalRecords: 0,
   });
 
@@ -250,14 +258,38 @@ const FybecaMantenimientoProducto = () => {
 
   const visibleProductos = useMemo(() => {
     const query = (globalFilter || "").toLowerCase().trim();
-    if (!query) return productos;
-    return productos.filter((p) =>
+    let base = [...productos];
+    base = base.filter((p) => {
+      if (filterYear != null && Number(p.anio ?? p.year) !== Number(filterYear)) return false;
+      if (filterMonth != null && Number(p.mes ?? p.month) !== Number(filterMonth)) return false;
+      if (filterDay != null && Number(p.dia ?? p.day) !== Number(filterDay)) return false;
+      if (filterMarca && (p.marca ?? p?.producto?.marca ?? "").toLowerCase() !== filterMarca.toLowerCase()) return false;
+      if (filterDateRange && Array.isArray(filterDateRange)) {
+        const [from, to] = filterDateRange;
+        if (from || to) {
+          const itemDate = new Date(Number(p.anio ?? p.year ?? 1970), Number((p.mes ?? p.month ?? 1)) - 1, Number(p.dia ?? p.day ?? 1));
+          if (from) {
+            const df = new Date(from);
+            const f = new Date(df.getFullYear(), df.getMonth(), df.getDate());
+            if (itemDate < f) return false;
+          }
+          if (to) {
+            const dt = new Date(to);
+            const t = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+            if (itemDate > t) return false;
+          }
+        }
+      }
+      return true;
+    });
+    if (!query) return base;
+    return base.filter((p) =>
       globalFilterFields.some((f) => {
         const val = f.includes(".") ? f.split(".").reduce((acc, k) => (acc ? acc[k] : undefined), p) : p[f];
         return String(val ?? "").toLowerCase().includes(query);
       })
     );
-  }, [productos, globalFilter]);
+  }, [productos, globalFilter, filterYear, filterMonth, filterDay, filterMarca, filterDateRange]);
 
   const allVisibleIds = useMemo(() => visibleProductos.map((p) => p.id), [visibleProductos]);
 
@@ -382,6 +414,32 @@ const FybecaMantenimientoProducto = () => {
           </div>
         }
       />
+      
+      <div className="card-section">
+        <h3>Filtros</h3>
+        <div className="filter-container">
+          <div className="filter-group">
+            <label>Año</label>
+            <InputNumber value={filterYear} onValueChange={(e) => setFilterYear(e.value != null ? Number(e.value) : null)} min={1900} max={2100} placeholder="Año" />
+          </div>
+          <div className="filter-group">
+            <label>Mes</label>
+            <InputNumber value={filterMonth} onValueChange={(e) => setFilterMonth(e.value != null ? Number(e.value) : null)} min={1} max={12} placeholder="Mes" />
+          </div>
+          <div className="filter-group">
+            <label>Día</label>
+            <InputNumber value={filterDay} onValueChange={(e) => setFilterDay(e.value != null ? Number(e.value) : null)} min={1} max={31} placeholder="Día" />
+          </div>
+          <div className="filter-group">
+            <label>Marca</label>
+            <InputText value={filterMarca} onChange={(e) => setFilterMarca(e.target.value)} placeholder="Marca" />
+          </div>
+          <div className="filter-group">
+            <label>Rango de Fecha</label>
+            <Calendar value={filterDateRange} onChange={(e) => setFilterDateRange(e.value || null)} selectionMode="range" readOnlyInput placeholder="Seleccione rango" dateFormat="dd/mm/yy" />
+          </div>
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex justify-content-center align-items-center" style={{ height: 200 }}>
@@ -395,7 +453,7 @@ const FybecaMantenimientoProducto = () => {
           header={header}
           paginator
           rows={paginatorState.rows}
-          rowsPerPageOptions={[5, 10, 25, 50, 100]}
+          rowsPerPageOptions={[50, 100, 150, 200]}
           totalRecords={visibleProductos.length}
           first={paginatorState.first}
           onPage={(e) => setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }))}

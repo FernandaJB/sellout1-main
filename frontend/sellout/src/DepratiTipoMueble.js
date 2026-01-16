@@ -13,6 +13,8 @@ import { Button } from 'primereact/button';
 import { Dialog } from 'primereact/dialog';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
+import { InputNumber } from 'primereact/inputnumber';
+import { Calendar } from 'primereact/calendar';
 import { FileUpload } from 'primereact/fileupload';
 import { Card } from 'primereact/card';
 import { Toolbar } from 'primereact/toolbar';
@@ -43,7 +45,7 @@ const DepratiTipoMueble = () => {
   // Configuración de paginación
   const [paginatorState, setPaginatorState] = useState({
     first: 0,
-    rows: 10,
+    rows: 50,
     page: 0,
     totalRecords: 0
   });
@@ -288,6 +290,11 @@ const DepratiTipoMueble = () => {
   };
 
   // Función para aplicar el filtro
+  const [filterYear, setFilterYear] = useState(null);
+  const [filterMonth, setFilterMonth] = useState(null);
+  const [filterDay, setFilterDay] = useState(null);
+  const [filterDateRange, setFilterDateRange] = useState(null);
+
   const applyFilter = () => {
     const filtered = tipoMuebles.filter((tipoMueble) => {
       const searchTerm = filter.toLowerCase();
@@ -302,7 +309,27 @@ const DepratiTipoMueble = () => {
           tipoMueble.cliente.nombreCliente.toLowerCase().includes(searchTerm))
         ) &&
         (filterTipoMuebleEssence === "" || tipoMueble.tipoMuebleEssence === filterTipoMuebleEssence) &&
-        (filterMarca === "" || tipoMueble.marca === filterMarca)
+        (filterMarca === "" || tipoMueble.marca === filterMarca) &&
+        (filterYear == null || Number(tipoMueble.anio ?? tipoMueble.year ?? 0) === Number(filterYear)) &&
+        (filterMonth == null || Number(tipoMueble.mes ?? tipoMueble.month ?? 0) === Number(filterMonth)) &&
+        (filterDay == null || Number(tipoMueble.dia ?? tipoMueble.day ?? 0) === Number(filterDay)) &&
+        (function() {
+          if (!filterDateRange || !Array.isArray(filterDateRange)) return true;
+          const [from, to] = filterDateRange;
+          if (!from && !to) return true;
+          const itemDate = new Date(Number(tipoMueble.anio ?? tipoMueble.year ?? 1970), Number((tipoMueble.mes ?? tipoMueble.month ?? 1)) - 1, Number(tipoMueble.dia ?? tipoMueble.day ?? 1));
+          if (from) {
+            const df = new Date(from);
+            const f = new Date(df.getFullYear(), df.getMonth(), df.getDate());
+            if (itemDate < f) return false;
+          }
+          if (to) {
+            const dt = new Date(to);
+            const t = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+            if (itemDate > t) return false;
+          }
+          return true;
+        })()
       );
     });
   
@@ -315,6 +342,10 @@ const DepratiTipoMueble = () => {
     setFilterTipoMuebleEssence("");
     setGlobalFilter("");
     setFilterMarca("");
+    setFilterYear(null);
+    setFilterMonth(null);
+    setFilterDay(null);
+    setFilterDateRange(null);
     setFilteredTipoMuebles(tipoMuebles);
   };
 
@@ -526,6 +557,38 @@ const DepratiTipoMueble = () => {
                     />
                   </div>
                 </div>
+                <div className="col-12 md:col-6 lg:col-2">
+                  <div className="p-inputgroup">
+                    <span className="p-inputgroup-addon">
+                      <i className="pi pi-calendar"></i>
+                    </span>
+                    <InputNumber value={filterYear} onValueChange={(e) => setFilterYear(e.value != null ? Number(e.value) : null)} placeholder="Año" />
+                  </div>
+                </div>
+                <div className="col-12 md:col-6 lg:col-2">
+                  <div className="p-inputgroup">
+                    <span className="p-inputgroup-addon">
+                      <i className="pi pi-calendar"></i>
+                    </span>
+                    <InputNumber value={filterMonth} onValueChange={(e) => setFilterMonth(e.value != null ? Number(e.value) : null)} placeholder="Mes" min={1} max={12} />
+                  </div>
+                </div>
+                <div className="col-12 md:col-6 lg:col-2">
+                  <div className="p-inputgroup">
+                    <span className="p-inputgroup-addon">
+                      <i className="pi pi-calendar"></i>
+                    </span>
+                    <InputNumber value={filterDay} onValueChange={(e) => setFilterDay(e.value != null ? Number(e.value) : null)} placeholder="Día" min={1} max={31} />
+                  </div>
+                </div>
+                <div className="col-12 md:col-6 lg:col-4">
+                  <div className="p-inputgroup">
+                    <span className="p-inputgroup-addon">
+                      <i className="pi pi-calendar-times"></i>
+                    </span>
+                    <Calendar value={filterDateRange} onChange={(e) => setFilterDateRange(e.value || null)} selectionMode="range" readOnlyInput placeholder="Rango de Fecha" dateFormat="dd/mm/yy" />
+                  </div>
+                </div>
                 <div className="col-12 md:col-6 lg:col-2 flex justify-content-end">
                   <Button 
                     label="Aplicar Filtros" 
@@ -588,15 +651,15 @@ const DepratiTipoMueble = () => {
             </DataTable>
             
             {/* Paginador */}
-            <Paginator 
-              first={paginatorState.first} 
-              rows={paginatorState.rows} 
-              totalRecords={paginatorState.totalRecords} 
-              rowsPerPageOptions={[5, 10, 20, 50]} 
-              onPageChange={onPageChange}
-              template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-              className="mt-3"
-            />
+              <Paginator 
+                first={paginatorState.first} 
+                rows={paginatorState.rows} 
+                totalRecords={paginatorState.totalRecords} 
+                rowsPerPageOptions={[50, 100, 150, 200]} 
+                onPageChange={onPageChange}
+                template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+                className="mt-3"
+              />
           </div>
         </div>
       </div>

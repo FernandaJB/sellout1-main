@@ -435,16 +435,20 @@ const TemplateGeneral = () => {
   const [filterYear, setFilterYear] = useState(null);
   const [filterMonth, setFilterMonth] = useState(null);
   const [filterMarca, setFilterMarca] = useState("");
-  const [filterDate, setFilterDate] = useState(null);
+  const [filterCliente, setFilterCliente] = useState(null);
+  const [filterDateRange, setFilterDateRange] = useState(null);
+  const [clientesOptions, setClientesOptions] = useState([]);
 
   const [appliedFilters, setAppliedFilters] = useState({
     year: null,
     month: null,
     marca: "",
-    date: null,
+    cliente: null,
+    dateFrom: null,
+    dateTo: null,
   });
 
-  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 10, page: 0 });
+  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, page: 0, totalRecords: 0 });
 
   const [uploadRemainingMs, setUploadRemainingMs] = useState(null);
   const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
@@ -568,21 +572,52 @@ const TemplateGeneral = () => {
     }
   };
 
+  const loadClientesOptions = async () => {
+    try {
+      const res = await fetch("/api-sellout/clientes/empresas", { method: "GET" });
+      if (!res.ok) throw new Error("No se pudo cargar la lista de clientes");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      const opts = list
+        .map((c) => {
+          const cod = c?.codCliente ?? c?.cod_Cliente ?? c?.cliente ?? c?.codigo ?? null;
+          const nom = c?.nombreCliente ?? c?.nombre_Cliente ?? c?.nombre ?? null;
+          if (!cod) return null;
+          const label = nom ? `${String(cod)} - ${String(nom)}` : String(cod);
+          return { label, value: String(cod) };
+        })
+        .filter(Boolean);
+      setClientesOptions(opts);
+    } catch (e) {
+      const map = new Map();
+      ventas.forEach((v) => {
+        const code = v?.codCliente ?? (v?.cliente ? v.cliente.codCliente : null);
+        const name = v?.nombreCliente ?? (v?.cliente ? v.cliente.nombreCliente : null);
+        if (code) {
+          map.set(String(code), name ? String(name) : String(code));
+        }
+      });
+      const opts = Array.from(map.entries()).map(([value, label]) => ({
+        label: `${value} - ${label}`,
+        value,
+      }));
+      setClientesOptions(opts);
+      showWarn("No se pudo cargar clientes desde API. Se muestran clientes presentes en datos.");
+    }
+  };
+
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const limit = paginatorState?.rows || 50;
-      const offset = paginatorState?.first || 0;
-      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-      const { data } = await apiFetch(`/venta?${qs.toString()}`);
+      const { data } = await apiFetch(`/venta`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
-      setPaginatorState((p) => ({ ...p, first: offset, rows: limit, page: Math.floor(offset / limit) }));
+      setPaginatorState((p) => ({ ...p, first: 0, rows: p.rows, page: 0, totalRecords: list.length }));
     } catch (e) {
       showError("Error al cargar ventas");
       setVentas([]);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
+      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
     } finally {
       setLoadingVentas(false);
     }
@@ -593,7 +628,9 @@ const TemplateGeneral = () => {
       appliedFilters.year !== null ||
       appliedFilters.month !== null ||
       !!appliedFilters.marca ||
-      !!appliedFilters.date,
+      !!appliedFilters.cliente ||
+      !!appliedFilters.dateFrom ||
+      !!appliedFilters.dateTo,
     [appliedFilters]
   );
 
@@ -602,12 +639,14 @@ const TemplateGeneral = () => {
     if (f.year !== null) params.set("anio", String(f.year));
     if (f.month !== null) params.set("mes", String(f.month));
     if (f.marca) params.set("marca", f.marca);
-    if (f.date) {
-      const d = new Date(f.date);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      params.set("fecha", `${yyyy}-${mm}-${dd}`);
+    if (f.cliente) params.set("codCliente", String(f.cliente));
+    if (f.dateFrom) {
+      const d = new Date(f.dateFrom);
+      params.set("fechaDesde", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+    if (f.dateTo) {
+      const d = new Date(f.dateTo);
+      params.set("fechaHasta", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
     }
     return params.toString();
   };
@@ -617,19 +656,22 @@ const TemplateGeneral = () => {
       if (f.year !== null && Number(item.anio) !== Number(f.year)) return false;
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
-      if (f.date) {
-        const d = new Date(f.date);
-        const itemDate = new Date(
-          Number(item.anio),
-          Number(item.mes) - 1,
-          Number(item.dia || 1)
-        );
-        if (
-          d.getFullYear() !== itemDate.getFullYear() ||
-          d.getMonth() !== itemDate.getMonth() ||
-          d.getDate() !== itemDate.getDate()
-        )
-          return false;
+      if (f.cliente) {
+        const cod = item.codCliente ?? (item.cliente ? item.cliente.codCliente : null);
+        if (!cod || String(cod) !== String(f.cliente)) return false;
+      }
+      if (f.dateFrom || f.dateTo) {
+        const itemDate = new Date(Number(item.anio), Number(item.mes) - 1, Number(item.dia || 1));
+        if (f.dateFrom) {
+          const d = new Date(f.dateFrom);
+          const from = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          if (itemDate < from) return false;
+        }
+        if (f.dateTo) {
+          const d = new Date(f.dateTo);
+          const to = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+          if (itemDate > to) return false;
+        }
       }
       return true;
     });
@@ -638,24 +680,21 @@ const TemplateGeneral = () => {
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const limit = paginatorState?.rows || 50;
-      const offset = paginatorState?.first || 0;
       const qsBase = buildQuery(f);
-      const qs = qsBase ? new URLSearchParams(qsBase) : new URLSearchParams();
-      qs.set("limit", String(limit));
-      qs.set("offset", String(offset));
-      const { data } = await apiFetch(`/venta?${qs.toString()}`);
+      const qs = qsBase ? new URLSearchParams(qsBase) : null;
+      const path = qs ? `/venta?${qs.toString()}` : `/venta`;
+      const { data } = await apiFetch(path);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit) }));
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
     } catch (e) {
       console.error(e);
       showWarn("No se pudo conectar a la API. Aplicando filtros localmente...");
       const filteredData = filterLocalData(ventas, f);
       setVentas(filteredData);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0 }));
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filteredData.length }));
       showInfo(`Se encontraron ${filteredData.length} registros con los filtros aplicados localmente.`);
     } finally {
       setLoadingVentas(false);
@@ -666,32 +705,33 @@ const TemplateGeneral = () => {
     loadMarcas();
     loadYearsOptions();
     loadVentas();
+    loadClientesOptions();
   }, []);
 
   useEffect(() => {
     setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
   }, [appliedFilters, globalFilter]);
 
-  const onPageChange = async (e) => {
-    setPaginatorState(e);
-    const limit = e?.rows || paginatorState?.rows || 50;
-    const offset = e?.first || paginatorState?.first || 0;
-    if (hasAnyApplied) {
-      await fetchVentasWithFilters(appliedFilters);
-    } else {
-      setLoadingVentas(true);
-      try {
-        const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-        const { data } = await apiFetch(`/venta?${qs.toString()}`);
-        const list = Array.isArray(data) ? data : [];
-        list._fromApi = true;
-        setVentas(list);
-      } catch (err) {
-        showError("Error al cambiar de página");
-      } finally {
-        setLoadingVentas(false);
-      }
+  useEffect(() => {
+    if (!clientesOptions || clientesOptions.length === 0) {
+      const map = new Map();
+      ventas.forEach((v) => {
+        const code = v?.codCliente ?? (v?.cliente ? v.cliente.codCliente : null);
+        const name = v?.nombreCliente ?? (v?.cliente ? v.cliente.nombreCliente : null);
+        if (code) {
+          map.set(String(code), name ? String(name) : String(code));
+        }
+      });
+      const opts = Array.from(map.entries()).map(([value, label]) => ({
+        label: `${value} - ${label}`,
+        value,
+      }));
+      setClientesOptions(opts);
     }
+  }, [ventas, clientesOptions]);
+
+  const onPageChange = async (e) => {
+    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }));
   };
 
   const filteredData = useMemo(() => {
@@ -966,18 +1006,15 @@ const TemplateGeneral = () => {
   };
 
   const downloadVentasReport = async () => {
-    setLoadingVentas(true);
     try {
       const { blob, filename } = await apiFetch("/reporte-ventas", { expect: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = filename || "reporte_ventas_template_general.xlsx";
       link.click();
-      showSuccess("Reporte de ventas descargado correctamente");
+      showInfo("Reporte general descargándose en segundo plano.");
     } catch (e) {
       showError(String(e));
-    } finally {
-      setLoadingVentas(false);
     }
   };
 
@@ -1035,7 +1072,9 @@ const TemplateGeneral = () => {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");
       return;
     }
-    const newApplied = { year: filterYear, month: filterMonth, marca: filterMarca, date: filterDate };
+    const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
+    const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
+    const newApplied = { year: filterYear, month: filterMonth, marca: filterMarca, cliente: filterCliente, dateFrom, dateTo };
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     await fetchVentasWithFilters(newApplied);
@@ -1045,10 +1084,11 @@ const TemplateGeneral = () => {
     setFilterYear(null);
     setFilterMonth(null);
     setFilterMarca("");
-    setFilterDate(null);
+    setFilterCliente(null);
+    setFilterDateRange(null);
     setGlobalFilter("");
     setMonthsOptions([]);
-    setAppliedFilters({ year: null, month: null, marca: "", date: null });
+    setAppliedFilters({ year: null, month: null, marca: "", cliente: null, dateFrom: null, dateTo: null });
     await loadVentas();
     showInfo("Filtros limpiados correctamente.");
   };
@@ -1179,11 +1219,11 @@ const TemplateGeneral = () => {
             <Card className="deprati-filter-card mb-3">
               <h3 className="deprati-section-title text-primary mb-3">Filtros de Búsqueda</h3>
               <div className="grid formgrid">
-                <div className="flex flex-wrap gap-8 align-items-end">
-                  <div className="field">
-                    <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">
-                      Año
-                    </label>
+              <div className="flex flex-wrap gap-8 align-items-end">
+                <div className="field">
+                  <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">
+                    Año
+                  </label>
                     <Dropdown
                       id="filterYear"
                       value={filterYear}
@@ -1212,39 +1252,55 @@ const TemplateGeneral = () => {
                       className="deprati-dropdown w-12rem"
                       disabled={filterYear == null || monthsOptions.length === 0}
                     />
-                  </div>
+                </div>
 
-                  <div className="field">
-                    <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
-                      Marca
-                    </label>
-                    <Dropdown
-                      id="filterMarca"
-                      value={filterMarca}
-                      options={marcas.map((m) => ({ label: m, value: m }))}
-                      onChange={(e) => setFilterMarca(e.value)}
-                      placeholder="Seleccionar Marca"
-                      className="deprati-dropdown w-12rem"
-                    />
-                  </div>
+                <div className="field">
+                  <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
+                    Marca
+                  </label>
+                  <Dropdown
+                    id="filterMarca"
+                    value={filterMarca}
+                    options={marcas.map((m) => ({ label: m, value: m }))}
+                    onChange={(e) => setFilterMarca(e.value)}
+                    placeholder="Seleccionar Marca"
+                    className="deprati-dropdown w-12rem"
+                  />
+                </div>
 
-                  <div className="field">
-                    <label htmlFor="filterDate" className="deprati-label font-bold block mb-2">
-                      Fecha específica
-                    </label>
+                <div className="field">
+                  <label htmlFor="filterCliente" className="deprati-label font-bold block mb-2">
+                    Cliente
+                  </label>
+                  <Dropdown
+                    id="filterCliente"
+                    value={filterCliente}
+                    options={clientesOptions}
+                    onChange={(e) => setFilterCliente(e.value)}
+                    placeholder="Seleccionar Cliente"
+                    className="deprati-dropdown w-16rem"
+                  />
+                </div>
+
+                <div className="field">
+                  <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">
+                    Rango de Fecha
+                  </label>
                     <Calendar
-                      id="filterDate"
-                      value={filterDate}
-                      onChange={(e) => setFilterDate(e.value || null)}
+                      id="filterDateRange"
+                      value={filterDateRange}
+                      onChange={(e) => setFilterDateRange(e.value || null)}
                       dateFormat="dd/mm/yy"
-                      placeholder="Seleccione la fecha"
-                      className="deprati-calendar w-14rem"
+                      selectionMode="range"
+                      readOnlyInput
+                      placeholder="Seleccione rango de fechas"
+                      className="deprati-calendar w-16rem"
                       showIcon
                       inputClassName="text-black font-bold"
                     />
-                  </div>
                 </div>
               </div>
+            </div>
 
               <Divider className="deprati-divider" />
               <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
@@ -1268,12 +1324,12 @@ const TemplateGeneral = () => {
               loading={loadingVentas}
               paginator
               rows={paginatorState.rows}
-              rowsPerPageOptions={[5, 10, 25, 50]}
+              rowsPerPageOptions={[50, 100, 150, 200]}
               first={paginatorState.first}
               onPage={onPageChange}
               paginatorClassName="p-3 deprati-square-paginator"
               paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
-              currentPageReportTemplate={`Mostrando {first} a {last} de ${filteredData.length} registros`}
+              currentPageReportTemplate={`Mostrando {first} a {last} de {totalRecords} registros`}
               responsiveLayout="scroll"
               emptyMessage="No hay ventas disponibles."
               className="p-datatable-sm"

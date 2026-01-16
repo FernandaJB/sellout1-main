@@ -340,17 +340,19 @@ const Fybeca = () => {
 
   const [filterYear, setFilterYear] = useState(null);
   const [filterMonth, setFilterMonth] = useState(null);
+  const [filterDay, setFilterDay] = useState(null);
   const [filterMarca, setFilterMarca] = useState("");
-  const [filterDate, setFilterDate] = useState(null);
+  const [filterDateRange, setFilterDateRange] = useState(null); // [from, to]
   const [globalFilter, setGlobalFilter] = useState("");
 
-  const [appliedFilters, setAppliedFilters] = useState({ year: null, month: null, marca: "", date: null });
+  const [appliedFilters, setAppliedFilters] = useState({ year: null, month: null, day: null, marca: "", dateFrom: null, dateTo: null });
 
   // Mostrar todo tras limpiar filtros
   const [showAll, setShowAll] = useState(false);
 
   // === Paginator ===
-  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 10, page: 0, totalRecords: 0 });
+  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, page: 0, totalRecords: 0 });
+  const [fullDataLoaded, setFullDataLoaded] = useState(false);
 
   // === Toast helpers ===
   const showToast = ({ type = "info", summary, detail, life = 3500, content, sticky, className }) =>
@@ -453,13 +455,47 @@ const Fybeca = () => {
     }
   };
 
+  const loadVentasAll = async () => {
+    setLoadingVentas(true);
+    try {
+      const batch = 5000;
+      let offset = 0;
+      let all = [];
+      while (true) {
+        const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(batch), offset: String(offset) });
+        const { data } = await apiFetch(`/venta?${qs.toString()}`);
+        const chunk = (Array.isArray(data) ? data : []).map((v) =>
+          v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
+        );
+        all = all.concat(chunk);
+        if (chunk.length < batch) break;
+        offset += batch;
+      }
+      all._fromApi = true;
+      setVentas(all);
+      setVentasBase(all);
+      setPaginatorState((p) => ({ ...p, first: 0, rows: p.rows || 50, page: 0, totalRecords: all.length }));
+      setShowAll(true);
+      setFullDataLoaded(true);
+    } catch (e) {
+      showError("Error al cargar ventas");
+      setVentas([]);
+      setVentasBase([]);
+      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
+    } finally {
+      setLoadingVentas(false);
+    }
+  };
+
   // ===== helper filtros =====
   const hasAnyApplied = useMemo(
     () =>
       appliedFilters.year !== null ||
       appliedFilters.month !== null ||
+      appliedFilters.day !== null ||
       !!appliedFilters.marca ||
-      !!appliedFilters.date,
+      !!appliedFilters.dateFrom ||
+      !!appliedFilters.dateTo,
     [appliedFilters]
   );
 
@@ -472,13 +508,21 @@ const Fybeca = () => {
     const params = new URLSearchParams();
     if (f.year !== null) params.set("anio", String(f.year));
     if (f.month !== null) params.set("mes", String(f.month));
+    if (f.day !== null) params.set("dia", String(f.day));
     if (f.marca) params.set("marca", f.marca);
-    if (f.date) {
-      const d = new Date(f.date);
+    if (f.dateFrom) {
+      const d = new Date(f.dateFrom);
       const yyyy = d.getFullYear();
       const mm = String(d.getMonth() + 1).padStart(2, "0");
       const dd = String(d.getDate()).padStart(2, "0");
-      params.set("fecha", `${yyyy}-${mm}-${dd}`);
+      params.set("fechaDesde", `${yyyy}-${mm}-${dd}`);
+    }
+    if (f.dateTo) {
+      const d = new Date(f.dateTo);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      params.set("fechaHasta", `${yyyy}-${mm}-${dd}`);
     }
     params.set("codCliente", COD_CLIENTE_FIJO);
     return params.toString();
@@ -489,20 +533,18 @@ const Fybeca = () => {
       if ((item?.cliente?.codCliente || "").trim() !== COD_CLIENTE_FIJO) return false;
       if (f.year !== null && Number(item.anio) !== Number(f.year)) return false;
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
+      if (f.day !== null && Number(item.dia) !== Number(f.day)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
-      if (f.date) {
-        const d = new Date(f.date);
-        const itemDate = new Date(
-          Number(item.anio),
-          Number(item.mes) - 1,
-          Number(item.dia || 1)
-        );
-        if (
-          d.getFullYear() !== itemDate.getFullYear() ||
-          d.getMonth() !== itemDate.getMonth() ||
-          d.getDate() !== itemDate.getDate()
-        )
-          return false;
+      if (f.dateFrom || f.dateTo) {
+        const itemDate = new Date(Number(item.anio), Number(item.mes) - 1, Number(item.dia || 1));
+        if (f.dateFrom) {
+          const from = new Date(f.dateFrom);
+          if (itemDate < new Date(from.getFullYear(), from.getMonth(), from.getDate())) return false;
+        }
+        if (f.dateTo) {
+          const to = new Date(f.dateTo);
+          if (itemDate > new Date(to.getFullYear(), to.getMonth(), to.getDate())) return false;
+        }
       }
       return true;
     });
@@ -538,7 +580,7 @@ const Fybeca = () => {
   // ===== efectos =====
   useEffect(() => {
     loadMarcas();
-    loadVentas();
+    loadVentasAll();
   }, []);
 
   useEffect(() => {
@@ -581,6 +623,7 @@ const Fybeca = () => {
 
   const onPageChange = async (e) => {
     setPaginatorState(e);
+    if (fullDataLoaded) return;
     const limit = e?.rows || paginatorState?.rows || 50;
     const offset = e?.first || paginatorState?.first || 0;
     const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(limit), offset: String(offset) });
@@ -930,18 +973,15 @@ const Fybeca = () => {
 
   // ===== Reportes =====
   const downloadVentasReport = async () => {
-    setLoadingVentas(true);
     try {
       const { blob, filename } = await apiFetch(`/reporte-ventas`, { expect: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = filename || "reporte_ventas_fybeca.xlsx";
       link.click();
-      showSuccess("Reporte de ventas descargado correctamente");
+      showInfo("Reporte general descargándose en segundo plano.");
     } catch (e) {
       showError(String(e));
-    } finally {
-      setLoadingVentas(false);
     }
   };
 
@@ -1010,7 +1050,9 @@ const Fybeca = () => {
     }
     const year = filterYear != null && filterYear !== "" ? Number(filterYear) : null;
     const month = filterMonth != null && filterMonth !== "" ? Number(filterMonth) : null;
-    const newApplied = { year, month, marca: filterMarca, date: filterDate };
+    const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
+    const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
+    const newApplied = { year, month, day: filterDay, marca: filterMarca, dateFrom, dateTo };
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     setShowAll(false);
@@ -1021,10 +1063,11 @@ const Fybeca = () => {
     setFilterYear(null);
     setFilterMonth(null);
     setFilterMarca("");
-    setFilterDate(null);
+    setFilterDay(null);
+    setFilterDateRange(null);
     setGlobalFilter("");
     setMonthsOptions([]);
-    setAppliedFilters({ year: null, month: null, marca: "", date: null });
+    setAppliedFilters({ year: null, month: null, day: null, marca: "", dateFrom: null, dateTo: null });
     setShowAll(true);
     await loadVentas();
     showInfo("Filtros limpiados correctamente.");
@@ -1247,62 +1290,66 @@ const Fybeca = () => {
                 />
               </div>
 
-              <div className="field">
-                <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
-                  Marca
-                </label>
-                <Dropdown
-                  id="filterMarca"
-                  value={filterMarca}
-                  options={marcas.map((m) => ({ label: m, value: m }))}
-                  onChange={(e) => setFilterMarca(e.value)}
-                  placeholder="Seleccionar Marca"
-                  className="deprati-dropdown w-12rem"
-                />
-              </div>
+          <div className="field">
+            <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
+              Marca
+            </label>
+            <Dropdown
+              id="filterMarca"
+              value={filterMarca}
+              options={marcas.map((m) => ({ label: m, value: m }))}
+              onChange={(e) => setFilterMarca(e.value)}
+              placeholder="Seleccionar Marca"
+              className="deprati-dropdown w-12rem"
+            />
+          </div>
 
-              <div className="field">
-                <label htmlFor="filterDate" className="deprati-label font-bold block mb-2">
-                  Fecha específica
-                </label>
-                <Calendar
-                  id="filterDate"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.value || null)}
-                  dateFormat="dd/mm/yy"
-                  placeholder="Seleccione la fecha"
-                  className="deprati-calendar w-14rem"
-                  showIcon
-                  inputClassName="text-black font-bold"
-                />
-              </div>
+          {/* Eliminado filtro Día numérico, usar solo Rango de Fecha */}
+
+          <div className="field">
+            <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">
+              Rango de Fecha
+            </label>
+            <Calendar
+              id="filterDateRange"
+              value={filterDateRange}
+              onChange={(e) => setFilterDateRange(e.value || null)}
+              dateFormat="dd/mm/yy"
+              selectionMode="range"
+              readOnlyInput
+              placeholder="Seleccione rango de fechas"
+              className="deprati-calendar w-16rem"
+              showIcon
+              inputClassName="text-black font-bold"
+            />
+          </div>
             </div>
-          </div>
+  </div>
 
-          <Divider className="deprati-divider" />
-          <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
-            <Button
-              label="Aplicar Filtro"
-              icon="pi pi-filter"
-              onClick={handleApplyFilters}
-              className="p-button-primary p-button-raised deprati-button deprati-button-apply"
-            />
-            <Button
-              label="Limpiar Filtros"
-              icon="pi pi-times"
-              onClick={handleClearFilters}
-              className="p-button-raised p-button-outlined deprati-button deprati-button-clear"
-            />
-          </div>
-        </Card>
+  <Divider className="deprati-divider" />
+  <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
+    <Button
+      label="Aplicar Filtro"
+      icon="pi pi-filter"
+      onClick={handleApplyFilters}
+      className="p-button-primary p-button-raised deprati-button deprati-button-apply"
+    />
+    <Button
+      label="Limpiar Filtros"
+      icon="pi pi-times"
+      onClick={handleClearFilters}
+      className="p-button-raised p-button-outlined deprati-button deprati-button-clear"
+    />
+  </div>
+</Card>
 
-        {/* Tabla */}
-        <div className="card">
-          <DataTable
+{/* Tabla */}
+<div className="card">
+  <DataTable
             value={filteredData}
             paginator
             rows={paginatorState.rows}
-            rowsPerPageOptions={[5, 10, 25, 50]}
+            rowsPerPageOptions={[50, 100, 150, 200]}
             totalRecords={paginatorState.totalRecords}
             first={paginatorState.first}
             onPage={onPageChange}

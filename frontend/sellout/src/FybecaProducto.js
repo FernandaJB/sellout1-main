@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./css/fybeca.css"; // Asegúrate de tener tu archivo CSS
 import { ProgressSpinner } from 'primereact/progressspinner';
+import { Paginator } from "primereact/paginator";
 
 const FybecaProducto = () => {
   const [productos, setProductos] = useState([]);
@@ -11,8 +12,15 @@ const FybecaProducto = () => {
   const [filtros, setFiltros] = useState({
     nombre: '',
     codigoSap: '',
-    descripcion: ''
+    descripcion: '',
+    anio: '',
+    mes: '',
+    dia: '',
+    marca: '',
+    fechaDesde: '',
+    fechaHasta: ''
   });
+  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, totalRecords: 0 });
 
   // Función para cargar productos con filtros aplicados
   const loadProductos = async () => {
@@ -26,6 +34,7 @@ const FybecaProducto = () => {
       }
       const data = await response.json();
       setProductos(data);
+      setPaginatorState((p) => ({ ...p, totalRecords: Array.isArray(data) ? data.length : 0, first: 0 }));
     } catch (error) {
       setError(error.message);
     } finally {
@@ -162,6 +171,54 @@ const FybecaProducto = () => {
               value={filtros.descripcion}
               onChange={handleFilterChange}
             />
+            <label>Año</label>
+            <input
+              type="number"
+              name="anio"
+              value={filtros.anio}
+              onChange={handleFilterChange}
+              min="1900"
+              max="2100"
+            />
+            <label>Mes</label>
+            <input
+              type="number"
+              name="mes"
+              value={filtros.mes}
+              onChange={handleFilterChange}
+              min="1"
+              max="12"
+            />
+            <label>Día</label>
+            <input
+              type="number"
+              name="dia"
+              value={filtros.dia}
+              onChange={handleFilterChange}
+              min="1"
+              max="31"
+            />
+            <label>Marca</label>
+            <input
+              type="text"
+              name="marca"
+              value={filtros.marca}
+              onChange={handleFilterChange}
+            />
+            <label>Fecha Desde</label>
+            <input
+              type="date"
+              name="fechaDesde"
+              value={filtros.fechaDesde}
+              onChange={handleFilterChange}
+            />
+            <label>Fecha Hasta</label>
+            <input
+              type="date"
+              name="fechaHasta"
+              value={filtros.fechaHasta}
+              onChange={handleFilterChange}
+            />
             <button type="submit" className="btn-filter">Aplicar Filtros</button>
           </form>
 
@@ -181,7 +238,7 @@ const FybecaProducto = () => {
                 </tr>
               </thead>
               <tbody>
-                {productos.map((producto) => (
+                {productos.slice(paginatorState.first, paginatorState.first + paginatorState.rows).map((producto) => (
                   <tr key={producto.id}>
                     <td>{producto.nombre_Producto}</td>
                     <td>{producto.codigo_Sap}</td>
@@ -204,6 +261,15 @@ const FybecaProducto = () => {
               </tbody>
             </table>
           </div>
+          <Paginator
+            first={paginatorState.first}
+            rows={paginatorState.rows}
+            totalRecords={paginatorState.totalRecords}
+            rowsPerPageOptions={[50, 100, 150, 200]}
+            onPageChange={(e) => setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }))}
+            template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+            className="mt-3"
+          />
 
           {showModal && productoEditar && (
             <div className="modal">

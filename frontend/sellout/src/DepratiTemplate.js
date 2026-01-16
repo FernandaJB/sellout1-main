@@ -70,17 +70,18 @@ const Deprati = () => {
   const [filterYear, setFilterYear] = useState("");
   const [filterMonth, setFilterMonth] = useState("");
   const [filterMarca, setFilterMarca] = useState("");
-  const [filterDate, setFilterDate] = useState(null);
+  const [filterDateRange, setFilterDateRange] = useState(null);
   const [marcas, setMarcas] = useState([]);
   const [globalFilter, setGlobalFilter] = useState('');
 
   // Paginación
   const [paginatorState, setPaginatorState] = useState({
     first: 0,
-    rows: 10,
+    rows: 50,
     page: 0,
     totalRecords: 0
   });
+  const [fullDataLoaded, setFullDataLoaded] = useState(false);
 
   useEffect(() => {
     loadMarcas();
@@ -97,27 +98,7 @@ const Deprati = () => {
   }, [filteredVentas]);
 
   const onPageChange = async (event) => {
-    setPaginatorState(event);
-    const limit = event?.rows || paginatorState?.rows || 10;
-    const offset = event?.first || paginatorState?.first || 0;
-    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-    setLoadingVentas(true);
-    try {
-      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
-      if (!res.ok) throw new Error("Error al paginar ventas");
-      const data = await res.json();
-      const processed = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
-      processed._fromApi = true;
-      if (filteredVentas && filteredVentas._fromApi) {
-        setFilteredVentas(processed);
-      } else {
-        setVentas(processed);
-      }
-    } catch (e) {
-      showError("Error al cambiar de página");
-    } finally {
-      setLoadingVentas(false);
-    }
+    setPaginatorState(prev => ({ ...prev, first: event.first, rows: event.rows }));
   };
 
   // Años/meses
@@ -156,17 +137,24 @@ const Deprati = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const limit = paginatorState?.rows || 10;
-      const offset = paginatorState?.first || 0;
-      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
-      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
-      if (!res.ok) throw new Error("Error al cargar ventas");
-      const data = await res.json();
-      const processed = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
-      processed._fromApi = true;
-      setVentas(processed);
-      setFilteredVentas([]);
-      setPaginatorState(prev => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: processed.length }));
+      const batch = 5000;
+      let offset = 0;
+      let all = [];
+      while (true) {
+        const qs = new URLSearchParams({ limit: String(batch), offset: String(offset) });
+        const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(60000) });
+        if (!res.ok) throw new Error("Error al cargar ventas");
+        const data = await res.json();
+        const chunk = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+        all = all.concat(chunk);
+        if (chunk.length < batch) break;
+        offset += batch;
+      }
+      all._fromApi = true;
+      setVentas(all);
+      setFilteredVentas(all);
+      setPaginatorState(prev => ({ ...prev, first: 0, rows: prev.rows || 50, page: 0, totalRecords: all.length }));
+      setFullDataLoaded(true);
     } catch (e) {
       console.error(e);
       showError("Error al cargar ventas");
@@ -495,40 +483,32 @@ const Deprati = () => {
 
   // ==== Filtros ====
   const handleApplyFilters = async () => {
-    const limit = paginatorState?.rows || 10;
-    const offset = 0;
-    const qs = new URLSearchParams();
-    if (filterYear) qs.set("anio", String(parseInt(filterYear)));
-    if (filterMonth) qs.set("mes", String(parseInt(filterMonth)));
-    if (filterMarca) qs.set("marca", filterMarca);
-    if (filterDate) {
-      const d = new Date(filterDate);
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      qs.set("fecha", `${yyyy}-${mm}-${dd}`);
-    }
-    qs.set("limit", String(limit));
-    qs.set("offset", String(offset));
     setLoadingVentas(true);
     try {
-      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`);
-      if (!res.ok) throw new Error("Error al filtrar ventas");
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
-      list._fromApi = true;
-      setFilteredVentas(list);
-      setPaginatorState(prev => ({ ...prev, first: offset, rows: limit, page: 0, totalRecords: list.length }));
-      showInfo(`Se encontraron ${list.length} registros con los filtros aplicados`);
-    } catch (e) {
-      const filtered = ventas.filter(v => (
-        (filterYear ? parseInt(filterYear) === v.anio : true) &&
-        (filterMonth ? parseInt(filterMonth) === v.mes : true) &&
-        (filterMarca ? (v.marca && v.marca.toLowerCase() === filterMarca.toLowerCase()) : true) &&
-        (filterDate ? (new Date(v.anio, v.mes - 1, v.dia).toDateString() === new Date(filterDate).toDateString()) : true)
-      ));
+      const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
+      const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
+      const filtered = ventas.filter(v => {
+        if (filterYear && Number(v.anio) !== Number(filterYear)) return false;
+        if (filterMonth && Number(v.mes) !== Number(filterMonth)) return false;
+        if (filterMarca && (v.marca || "").toLowerCase() !== filterMarca.toLowerCase()) return false;
+        if (dateFrom || dateTo) {
+          const dItem = new Date(Number(v.anio), Number(v.mes) - 1, Number(v.dia || 1));
+          if (dateFrom) {
+            const dFrom = new Date(dateFrom);
+            const from = new Date(dFrom.getFullYear(), dFrom.getMonth(), dFrom.getDate());
+            if (dItem < from) return false;
+          }
+          if (dateTo) {
+            const dTo = new Date(dateTo);
+            const to = new Date(dTo.getFullYear(), dTo.getMonth(), dTo.getDate());
+            if (dItem > to) return false;
+          }
+        }
+        return true;
+      });
       setFilteredVentas(filtered);
-      showWarn("No se pudo conectar a la API. Aplicando filtros localmente...");
+      setPaginatorState(prev => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
+      showInfo(`Se encontraron ${filtered.length} registros con los filtros aplicados`);
     } finally {
       setLoadingVentas(false);
     }
@@ -538,7 +518,7 @@ const Deprati = () => {
     setFilterYear("");
     setFilterMonth("");
     setFilterMarca("");
-    setFilterDate(null);
+    setFilterDateRange(null);
     setFilteredVentas([]);  // permanece vacío hasta filtrar
     setGlobalFilter('');
   };
@@ -642,6 +622,27 @@ const Deprati = () => {
     showSuccess(`Se ha generado el reporte con ${filteredVentas.length} registros.`);
   };
 
+  const downloadGeneralReport = async () => {
+    try {
+      const resp = await fetch("/api-sellout/deprati/reporte-ventas", { method: "GET" });
+      if (!resp.ok) throw new Error("Error al descargar reporte general");
+      const cd = resp.headers.get("Content-Disposition");
+      const filename = cd ? cd.split("filename=")[1]?.replace(/\"/g, "") : "reporte_ventas_deprati.xlsx";
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename || "reporte_ventas_deprati.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showInfo("Reporte general descargándose en segundo plano.");
+    } catch (e) {
+      showError(e.message);
+    }
+  };
+
   const exportToExcel = () => {
     if (!filteredVentas.length) {
       showWarn("No hay datos para exportar.");
@@ -711,6 +712,12 @@ const Deprati = () => {
         icon="pi pi-file-excel"
         className="p-button-success p-button-raised deprati-button deprati-button-export"
         onClick={exportToExcel}
+      />
+      <Button
+        label="Reporte Ventas"
+        icon="pi pi-file-excel"
+        onClick={downloadGeneralReport}
+        className="p-button-success p-button-raised deprati-button"
       />
       <Button
         label="Reporte de Ventas Con Filtro"
@@ -933,13 +940,15 @@ const Deprati = () => {
               />
             </div>
             <div className="col-12 md:col-3 field">
-              <label htmlFor="filterDate" className="deprati-label font-bold block mb-2">Fecha Específica</label>
+              <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">Rango de Fecha</label>
               <Calendar
-                id="filterDate"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.value)}
+                id="filterDateRange"
+                value={filterDateRange}
+                onChange={(e) => setFilterDateRange(e.value)}
                 dateFormat="dd/mm/yy"
-                placeholder="Seleccione la Fecha"
+                selectionMode="range"
+                readOnlyInput
+                placeholder="Seleccione rango de fechas"
                 className="deprati-calendar w-full"
                 showIcon
                 inputClassName="text-black font-bold"
@@ -969,7 +978,7 @@ const Deprati = () => {
             value={filteredVentas}
             paginator
             rows={paginatorState.rows}
-            rowsPerPageOptions={[5, 10, 25, 50]}
+            rowsPerPageOptions={[50, 100, 150, 200]}
             totalRecords={paginatorState.totalRecords}
             first={paginatorState.first}
             onPage={onPageChange}

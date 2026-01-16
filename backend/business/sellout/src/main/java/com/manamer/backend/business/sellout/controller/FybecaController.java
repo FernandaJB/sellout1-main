@@ -5,8 +5,7 @@ import com.manamer.backend.business.sellout.models.ExcelUtils;
 import com.manamer.backend.business.sellout.models.Producto;
 import com.manamer.backend.business.sellout.models.TipoMueble;
 import com.manamer.backend.business.sellout.models.Venta;
-import com.manamer.backend.business.sellout.repositories.ProductoRepository;
-import com.manamer.backend.business.sellout.service.ClienteService;
+import com.manamer.backend.business.sellout.service ClienteService;
 import com.manamer.backend.business.sellout.service.FybecaVentaService;
 import com.manamer.backend.business.sellout.service.ProductoService;
 import com.manamer.backend.business.sellout.service.TipoMuebleService;
@@ -46,19 +45,16 @@ public class FybecaController {
     private final TipoMuebleService tipoMuebleService;
     private final ClienteService clienteService;
     private final ProductoService productoService;
-    private final ProductoRepository repository;
 
     @Autowired
     public FybecaController(FybecaVentaService fybecaService,
                             TipoMuebleService tipoMuebleService,
                             ClienteService clienteService,
-                            ProductoService productoService,
-                            ProductoRepository repository) {
+                            ProductoService productoService) {
         this.fybecaService = fybecaService;
         this.tipoMuebleService = tipoMuebleService;
         this.clienteService = clienteService;
         this.productoService = productoService;
-        this.repository = repository;
     }
 
     // ---------- Helpers ----------
@@ -428,16 +424,6 @@ public class FybecaController {
         }
     }
 
-    // >>> Borrado masivo de productos en lotes de 5000 <<<
-    public void deleteProductos(List<Long> ids) {
-        if (ids == null || ids.isEmpty()) {
-            throw new IllegalArgumentException("No se proporcionaron IDs para eliminar.");
-        }
-        for (List<Long> batch : partition(ids, DELETE_BATCH_SIZE)) {
-            repository.deleteAllById(batch);
-        }
-    }
-
     @DeleteMapping("/productos")
     public ResponseEntity<ProductoService.DeleteProductosResult> eliminarProductos(@RequestBody List<Long> ids) {
         var result = productoService.deleteProductosSafe(ids);
@@ -581,7 +567,7 @@ public class FybecaController {
     @GetMapping("/reporte-productos")
     public ResponseEntity<byte[]> generarReporteProductos() {
         try {
-            List<Producto> productos = repository.findAll();
+            List<Producto> productos = productoService.getAllProductos();
 
             XSSFWorkbook workbook = new XSSFWorkbook();
             Sheet sheet = workbook.createSheet("Productos");

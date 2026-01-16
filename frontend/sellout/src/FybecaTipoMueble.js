@@ -4,6 +4,7 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { ProgressSpinner } from "primereact/progressspinner";
+import { Paginator } from "primereact/paginator";
 
 // ===================== Helpers de borrado (compatibles con API masiva/no-estándar) =====================
 export async function parseDeleteResponse(resp) {
@@ -81,6 +82,11 @@ const FybecaTipoMueble = () => {
   const [filter, setFilter] = useState("");
   const [filterTipoMuebleEssence, setFilterTipoMuebleEssence] = useState("");
   const [filterTipoMuebleCatrice, setFilterTipoMuebleCatrice] = useState("");
+  const [filterYear, setFilterYear] = useState(null);
+  const [filterMonth, setFilterMonth] = useState(null);
+  const [filterDay, setFilterDay] = useState(null);
+  const [filterMarca, setFilterMarca] = useState("");
+  const [filterDateRange, setFilterDateRange] = useState(null);
 
   // ====== selección múltiple (IDs) ======
   const [selectedIds, setSelectedIds] = useState([]);
@@ -131,6 +137,26 @@ const FybecaTipoMueble = () => {
     return (tipoMuebles || []).filter((tm) => {
       const esCliente = (tm?.cliente?.codCliente || "").trim() === COD_CLIENTE_FIJO;
       if (!esCliente) return false;
+      if (filterYear != null && Number(tm.anio ?? tm.year) !== Number(filterYear)) return false;
+      if (filterMonth != null && Number(tm.mes ?? tm.month) !== Number(filterMonth)) return false;
+      if (filterDay != null && Number(tm.dia ?? tm.day) !== Number(filterDay)) return false;
+      if (filterMarca && (tm.marca ?? tm?.producto?.marca ?? "").toLowerCase() !== filterMarca.toLowerCase()) return false;
+      if (filterDateRange && Array.isArray(filterDateRange)) {
+        const [from, to] = filterDateRange;
+        if (from || to) {
+          const itemDate = new Date(Number(tm.anio ?? tm.year ?? 1970), Number((tm.mes ?? tm.month ?? 1)) - 1, Number(tm.dia ?? tm.day ?? 1));
+          if (from) {
+            const df = new Date(from);
+            const f = new Date(df.getFullYear(), df.getMonth(), df.getDate());
+            if (itemDate < f) return false;
+          }
+          if (to) {
+            const dt = new Date(to);
+            const t = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+            if (itemDate > t) return false;
+          }
+        }
+      }
       const matchTexto = !q || [
         tm?.codPdv,
         tm?.nombrePdv,
@@ -147,7 +173,13 @@ const FybecaTipoMueble = () => {
       const matchCatrice = !filterTipoMuebleCatrice || tm?.tipoMuebleCatrice === filterTipoMuebleCatrice;
       return matchTexto && matchEssence && matchCatrice;
     });
-  }, [tipoMuebles, filter, filterTipoMuebleEssence, filterTipoMuebleCatrice]);
+  }, [tipoMuebles, filter, filterTipoMuebleEssence, filterTipoMuebleCatrice, filterYear, filterMonth, filterDay, filterMarca, filterDateRange]);
+
+  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, totalRecords: 0 });
+
+  useEffect(() => {
+    setPaginatorState((p) => ({ ...p, totalRecords: visibleTipoMuebles.length, first: 0 }));
+  }, [visibleTipoMuebles]);
 
   // ====== selección estilo "seleccionar visibles" ======
   const allVisibleIds = useMemo(() => visibleTipoMuebles.map((tm) => tm.id), [visibleTipoMuebles]);
@@ -423,6 +455,33 @@ const FybecaTipoMueble = () => {
               ))}
             </select>
           </div>
+          <div className="filter-group">
+            <label>Año</label>
+            <input type="number" value={filterYear ?? ""} onChange={(e) => setFilterYear(e.target.value ? Number(e.target.value) : null)} placeholder="Año" />
+          </div>
+          <div className="filter-group">
+            <label>Mes</label>
+            <input type="number" value={filterMonth ?? ""} onChange={(e) => setFilterMonth(e.target.value ? Number(e.target.value) : null)} placeholder="Mes" min={1} max={12} />
+          </div>
+          <div className="filter-group">
+            <label>Día</label>
+            <input type="number" value={filterDay ?? ""} onChange={(e) => setFilterDay(e.target.value ? Number(e.target.value) : null)} placeholder="Día" min={1} max={31} />
+          </div>
+          <div className="filter-group">
+            <label>Marca</label>
+            <input type="text" value={filterMarca} onChange={(e) => setFilterMarca(e.target.value)} placeholder="Marca" />
+          </div>
+          <div className="filter-group">
+            <label>Rango de Fecha</label>
+            <input type="date" value={filterDateRange?.[0] ? new Date(filterDateRange[0]).toISOString().slice(0,10) : ""} onChange={(e) => {
+              const d = e.target.value ? new Date(e.target.value) : null;
+              setFilterDateRange(d ? [d, filterDateRange?.[1] || null] : null);
+            }} />
+            <input type="date" value={filterDateRange?.[1] ? new Date(filterDateRange[1]).toISOString().slice(0,10) : ""} onChange={(e) => {
+              const d = e.target.value ? new Date(e.target.value) : null;
+              setFilterDateRange(d ? [filterDateRange?.[0] || null, d] : null);
+            }} />
+          </div>
         </div>
         <div className="filter-actions">
           <button className="btn-general" onClick={() => { /* filtros ya son reactivos */ }}>
@@ -490,7 +549,7 @@ const FybecaTipoMueble = () => {
                 </tr>
               </thead>
               <tbody>
-                {visibleTipoMuebles.map((tm) => (
+                {visibleTipoMuebles.slice(paginatorState.first, paginatorState.first + paginatorState.rows).map((tm) => (
                   <tr key={tm.id}>
                     <td>
                       <input type="checkbox" checked={selectedIds.includes(tm.id)} onChange={() => handleSelect(tm.id)} />
@@ -516,6 +575,15 @@ const FybecaTipoMueble = () => {
             </table>
           </div>
         )}
+        <Paginator
+          first={paginatorState.first}
+          rows={paginatorState.rows}
+          totalRecords={paginatorState.totalRecords}
+          rowsPerPageOptions={[50, 100, 150, 200]}
+          onPageChange={(e) => setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }))}
+          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+          className="mt-3"
+        />
       </div>
 
       {/* Modal edición simple */}

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./css/deprati.css";
 import "./css/fybeca-deprati-compatibility.css";
+import { Paginator } from "primereact/paginator";
 const API_URL = "/api-sellout/fybeca/cliente";
 
 const FybecaMantenimientoCliente = () => {
@@ -9,13 +10,16 @@ const FybecaMantenimientoCliente = () => {
   const [error, setError] = useState(null);
   const [clienteEditar, setClienteEditar] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, totalRecords: 0 });
 
   useEffect(() => {
     const loadClientes = async () => {
       try {
         const response = await fetch(API_URL);
         if (!response.ok) throw new Error("Error al cargar clientes");
-        setClientes(await response.json());
+        const data = await response.json();
+        setClientes(data);
+        setPaginatorState((p) => ({ ...p, totalRecords: Array.isArray(data) ? data.length : 0, first: 0 }));
       } catch (error) {
         setError(error.message);
       } finally {
@@ -73,7 +77,7 @@ const FybecaMantenimientoCliente = () => {
                 </tr>
               </thead>
               <tbody>
-                {clientes.map(({ id, cod_Cliente, nombre_Cliente }) => (
+                {clientes.slice(paginatorState.first, paginatorState.first + paginatorState.rows).map(({ id, cod_Cliente, nombre_Cliente }) => (
                   <tr key={id}>
                     <td>{cod_Cliente}</td>
                     <td>{nombre_Cliente}</td>
@@ -85,6 +89,15 @@ const FybecaMantenimientoCliente = () => {
               </tbody>
             </table>
           </div>
+          <Paginator
+            first={paginatorState.first}
+            rows={paginatorState.rows}
+            totalRecords={paginatorState.totalRecords}
+            rowsPerPageOptions={[50, 100, 150, 200]}
+            onPageChange={(e) => setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }))}
+            template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
+            className="mt-3"
+          />
 
           {showModal && clienteEditar && (
             <div className="modal">
