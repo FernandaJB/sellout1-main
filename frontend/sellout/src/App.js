@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import { FaSignOutAlt, FaMedkit, FaShoppingBag, FaFileExcel, FaUsers } from 'react-icons/fa'; // 👈 FaUsers para Clientes
+import { FaSignOutAlt, FaMedkit, FaShoppingBag, FaFileExcel, FaUsers, FaStore } from 'react-icons/fa'; // 👈 FaStore para RM
 import Login from './login';
 import Registrar from './Registrar';
 import OlvidarContraseña from './OlvidarContraseña';
@@ -11,7 +11,8 @@ import FybecaTipoMueble from './FybecaTipoMueble';
 import DepratiTipoMueble from './DepratiTipoMueble';
 import DepratiTemplate from './DepratiTemplate';
 import TemplateGeneral from './TemplateGeneral';
-import Cliente from './Cliente'; // 👈 NUEVO
+import Cliente from './Cliente';
+import RMTemplate from './RMTemplate';
 
 import './App.css';
 import './css/menu-dashboard.css';
@@ -86,6 +87,18 @@ const App = () => {
         { id: 'DepratiTipoMueble', name: 'Tipo Mueble', description: 'Configuración de tipos de muebles' }
       ]
     },
+
+    // ✅ NUEVO: RM como empresa
+    {
+      id: 'rm',
+      name: 'RMTemplate',
+      icon: <FaStore size={32} />,
+      color: '#f59e0b',
+      modules: [
+        { id: 'RMTemplate', name: 'Ventas (RMTemplate)', description: 'Carga Excel RM (VENTAS + STOCK), edición y eliminación' }
+      ]
+    },
+
     {
       id: 'template-general',
       name: 'Template General',
@@ -208,7 +221,10 @@ const App = () => {
                   {activeTab === 'FybecaTipoMueble' && <FybecaTipoMueble />}
                   {activeTab === 'DepratiTemplate' && <DepratiTemplate />}
                   {activeTab === 'DepratiTipoMueble' && <DepratiTipoMueble />}
-                  {activeTab === 'Cliente' && <Cliente />}{/* 👈 Render nuevo */}
+                  {activeTab === 'Cliente' && <Cliente />}
+
+                  {/* ✅ NUEVO: RM */}
+                  {activeTab === 'RMTemplate' && <RMTemplate />}
                 </>
               )
             ) : (

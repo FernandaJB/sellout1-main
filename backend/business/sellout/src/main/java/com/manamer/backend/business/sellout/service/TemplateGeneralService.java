@@ -68,6 +68,9 @@ public class TemplateGeneralService {
             java.time.format.DateTimeFormatter.ofPattern("M/d/uuuu")
     );
 
+    // ✅ CAMBIO: placeholder para que tienda vacía/no venga no se mezcle
+    private static final String PDV_PLACEHOLDER = "SIN_TIENDA";
+
     private final VentaRepository ventaRepository;
     private final ClienteService clienteService; // compatibilidad
     private final EntityManager em;
@@ -186,7 +189,9 @@ public class TemplateGeneralService {
                     ));
                     continue;
                 }
-                if (isBlank(codPdv)) codPdv = null;
+
+                // ✅ CAMBIO ÚNICO: si codPdv viene vacío/null, usar placeholder para no mezclar tiendas
+                if (isBlank(codPdv)) codPdv = PDV_PLACEHOLDER;
 
                 RegistroFila rf = new RegistroFila(
                         excelFila, codCliente, nombreCliente, fecha,
@@ -298,7 +303,7 @@ public class TemplateGeneralService {
         Set<Long> clienteIds = new HashSet<>();
         for (Cliente c : clientesPorCodigo.values()) if (c.getId() != null) clienteIds.add(c.getId());
         Map<String, Venta> ventasExistentes =
-        prefetchVentas(anios, meses, dias, codBarras, codPdvs, clienteIds);
+                prefetchVentas(anios, meses, dias, codBarras, codPdvs, clienteIds);
 
         int insertados = 0, actualizados = 0, omitidos = 0, i = 0;
 
@@ -423,8 +428,8 @@ public class TemplateGeneralService {
 
     @SuppressWarnings("unchecked")
     private Map<String, Venta> prefetchVentas(Set<Integer> anios, Set<Integer> meses, Set<Integer> dias,
-                                          Set<String> codBarras, Set<String> codPdvs, Set<Long> clienteIds)
-{
+                                             Set<String> codBarras, Set<String> codPdvs, Set<Long> clienteIds)
+    {
         Map<String, Venta> out = new HashMap<>();
         if (anios.isEmpty() || meses.isEmpty() || codBarras.isEmpty() || clienteIds.isEmpty()) return out;
 
@@ -454,19 +459,18 @@ public class TemplateGeneralService {
                             .setParameter("barras", barrasChunk)
                             .setParameter("clientes", clientesSub);
 
-
                     if (!codPdvs.isEmpty()) q.setParameter("pdvs", pdvSub);
 
                     List<Venta> res = q.getResultList();
                     for (Venta v : res) {
                         String k = buildKey(
-                            v.getAnio(),
-                            v.getMes(),
-                            v.getDia(),
-                            v.getCodBarra(),
-                            v.getCodPdv(),
-                            (v.getCliente() != null ? v.getCliente().getId() : null)
-                    );
+                                v.getAnio(),
+                                v.getMes(),
+                                v.getDia(),
+                                v.getCodBarra(),
+                                v.getCodPdv(),
+                                (v.getCliente() != null ? v.getCliente().getId() : null)
+                        );
 
                         out.put(k, v);
                     }
@@ -478,16 +482,15 @@ public class TemplateGeneralService {
     }
 
     private static String buildKey(Integer anio, Integer mes, Integer dia,
-                                String codBarra, String codPdv, Long clienteId) {
+                                   String codBarra, String codPdv, Long clienteId) {
 
         return (anio == null ? "" : anio) + "|" +
-            (mes == null ? "" : mes) + "|" +
-            (dia == null ? "" : dia) + "|" +
-            (codBarra == null ? "" : codBarra.trim()) + "|" +
-            (codPdv == null ? "" : codPdv.trim()) + "|" +
-            (clienteId == null ? "" : clienteId);
+                (mes == null ? "" : mes) + "|" +
+                (dia == null ? "" : dia) + "|" +
+                (codBarra == null ? "" : codBarra.trim()) + "|" +
+                (codPdv == null ? "" : codPdv.trim()) + "|" +
+                (clienteId == null ? "" : clienteId);
     }
-
 
     private static String soloCod(String codCliente) {
         return codCliente == null ? null : codCliente.trim().toUpperCase(Locale.ROOT);
@@ -509,10 +512,10 @@ public class TemplateGeneralService {
             String placeholders = String.join(",", Collections.nCopies(chunk.size(), "?"));
 
             String sql =
-                "SELECT p.cod_barra, MAX(p.codigo_sap) AS codigo_sap " +
-                "FROM SELLOUT.dbo.SAP_Prod_cache p " +
-                "WHERE p.cod_barra IN (" + placeholders + ") " +
-                "GROUP BY p.cod_barra";
+                    "SELECT p.cod_barra, MAX(p.codigo_sap) AS codigo_sap " +
+                    "FROM SELLOUT.dbo.SAP_Prod_cache p " +
+                    "WHERE p.cod_barra IN (" + placeholders + ") " +
+                    "GROUP BY p.cod_barra";
 
             try {
                 Query q = em.createNativeQuery(sql);
@@ -528,7 +531,7 @@ public class TemplateGeneralService {
                 }
             } catch (Exception ex) {
                 log.severe("prefetchSapByCodBarra cache falló. chunkSize=" +
-                           chunk.size() + " | error=" + ex.getMessage());
+                        chunk.size() + " | error=" + ex.getMessage());
             } finally {
                 em.clear();
             }

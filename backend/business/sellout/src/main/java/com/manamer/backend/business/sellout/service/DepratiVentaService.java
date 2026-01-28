@@ -29,29 +29,42 @@ public class DepratiVentaService {
     private static final Logger logger = Logger.getLogger(DepratiVentaService.class.getName());
     private static final int DELETE_BATCH_SIZE = 5000;
 
+    // ✅ MISMA REGLA: placeholder para evitar mezclar tiendas vacías/null
+    private static final String PDV_PLACEHOLDER = "SIN_TIENDA";
+
     private final VentaService ventaService;
     private final ClienteService clienteService; // <- NUEVO
 
-     @Autowired
-        public DepratiVentaService(VentaService ventaService,
-                                ClienteService clienteService) { // <- NUEVO
-            this.ventaService = ventaService;
-            this.clienteService = clienteService; // <- NUEVO
-        }
+    @Autowired
+    public DepratiVentaService(VentaService ventaService,
+                              ClienteService clienteService) { // <- NUEVO
+        this.ventaService = ventaService;
+        this.clienteService = clienteService; // <- NUEVO
+    }
 
-        /** 
-     * Busca por codCliente y devuelve la entidad con id cargado. 
-     * Si no existe, puedes: (a) lanzar excepción, (b) crearla, (c) devolver null.
-     * Aquí hago (a) por defecto para asegurar integridad.
+    /**
+     * Normaliza codPdv:
+     * - null/vacío => "SIN_TIENDA"
+     * - si viene con espacios => trim
+     */
+    private static String normalizarCodPdv(String codPdv) {
+        if (codPdv == null) return PDV_PLACEHOLDER;
+        String t = codPdv.trim();
+        return t.isEmpty() ? PDV_PLACEHOLDER : t;
+    }
+
+    /**
+     * Busca por codCliente y devuelve la entidad con id cargado.
+     * Si no existe, aquí lanzo excepción para asegurar integridad.
      */
     private Cliente resolveClienteOrThrow(String codCliente) {
         return clienteService.findByCodCliente(codCliente)
                 .orElseThrow(() -> new IllegalStateException(
-                    "No existe Cliente con codCliente=" + codCliente));
+                        "No existe Cliente con codCliente=" + codCliente));
     }
 
-    /** 
-     * Asegura que la venta tenga set() un Cliente con id (no solo el código). 
+    /**
+     * Asegura que la venta tenga un Cliente con id (no solo el código).
      * Si la venta ya trae Cliente con id, respeta ese id.
      */
     private void ensureClienteAttached(Venta v, String codCliente) {
@@ -60,6 +73,7 @@ public class DepratiVentaService {
         Cliente cli = resolveClienteOrThrow(codCliente);
         v.setCliente(cli); // ahora v.getCliente().getId() NO es null
     }
+
     // ----------------------------- Helpers comunes -----------------------------
 
     public static String normalizarTexto(String input) {
@@ -109,10 +123,8 @@ public class DepratiVentaService {
         } catch (Exception e) {
             logger.warning("Error al convertir celda: " + cell + " | " + e.getMessage());
         }
-        // 👇 este return final siempre garantiza un resultado
         return null;
     }
-
 
     private String obtenerTextoCrudoCelda(Cell cell) {
         try {
@@ -174,13 +186,12 @@ public class DepratiVentaService {
 
     public List<Venta> obtenerTodasLasVentasDeprati() {
         return ventaService.obtenerTodasLasVentas().stream()
-            .filter(v -> v != null
-                    && v.getCliente() != null
-                    && v.getCliente().getCodCliente() != null
-                    && COD_CLIENTE_DEPRATI.equalsIgnoreCase(v.getCliente().getCodCliente()))
-            .toList();
+                .filter(v -> v != null
+                        && v.getCliente() != null
+                        && v.getCliente().getCodCliente() != null
+                        && COD_CLIENTE_DEPRATI.equalsIgnoreCase(v.getCliente().getCodCliente()))
+                .toList();
     }
-
 
     public Optional<Venta> obtenerVentaDepratiPorId(Long id) {
         Optional<Venta> v = ventaService.obtenerVentaPorId(id);
@@ -194,7 +205,7 @@ public class DepratiVentaService {
     }
 
     public Venta actualizarVentaDeprati(Long id, Venta nuevaVenta) {
-         ensureClienteAttached(nuevaVenta, COD_CLIENTE_DEPRATI);
+        ensureClienteAttached(nuevaVenta, COD_CLIENTE_DEPRATI);
         return ventaService.actualizarVenta(id, nuevaVenta);
     }
 
@@ -266,9 +277,13 @@ public class DepratiVentaService {
             }
 
             for (int col = 12; col <= 44; col += 2) {
-                String codPdv = obtenerValorCelda(rowCodPdv.getCell(col), String.class);
+                String codPdvRaw = obtenerValorCelda(rowCodPdv.getCell(col), String.class);
                 String pdv = obtenerValorCelda(rowPdv.getCell(col), String.class);
-                if (codPdv != null && pdv != null && !codPdvMap.containsValue(codPdv)) {
+
+                // ✅ APLICAR REGLA: placeholder para tienda vacía/null
+                String codPdv = normalizarCodPdv(codPdvRaw);
+
+                if (pdv != null && !codPdvMap.containsValue(codPdv)) {
                     codPdvMap.put(col, codPdv);
                     pdvMap.put(col, pdv);
                 }
@@ -346,7 +361,10 @@ public class DepratiVentaService {
 
                 for (Map.Entry<Integer, String> entry : codPdvMap.entrySet()) {
                     int col = entry.getKey();
-                    String codPdv = entry.getValue();
+
+                    // ✅ APLICAR REGLA: placeholder para tienda vacía/null
+                    String codPdv = normalizarCodPdv(entry.getValue());
+
                     String pdv = pdvMap.get(col);
                     Double ventaUnidades = convertirADoubleSeguro(row.getCell(col), i + 1, col);
                     Double ventaUSD      = convertirADoubleSeguro(row.getCell(col + 1), i + 1, col + 1);
@@ -400,6 +418,7 @@ public class DepratiVentaService {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
             ventaService.guardarVentas(ventas);
+
             logger.info("DepratiFlexible: fin procesamiento filasLeidas=" + filasLeidas + " procesadas=" + filasProcesadas + " noEncontrados=" + codigosNoEncontrados.size());
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
@@ -462,9 +481,14 @@ public class DepratiVentaService {
             Map<Integer, String> codPdvMap = new LinkedHashMap<>();
             Map<Integer, String> pdvMap = new LinkedHashMap<>();
             for (int col = 0; col < rowCodPdv.getLastCellNum(); col++) {
-                String codPdv = obtenerValorCelda(rowCodPdv.getCell(col), String.class);
-                if (codPdv == null || !codPdv.toLowerCase().contains("tienda")) continue;
+                String codPdvRaw = obtenerValorCelda(rowCodPdv.getCell(col), String.class);
+                if (codPdvRaw == null || !codPdvRaw.toLowerCase().contains("tienda")) continue;
+
                 String pdv = obtenerValorCelda(rowPdv.getCell(col), String.class);
+
+                // ✅ APLICAR REGLA: placeholder para tienda vacía/null
+                String codPdv = normalizarCodPdv(codPdvRaw);
+
                 if (pdv != null && !codPdvMap.containsValue(codPdv)) {
                     codPdvMap.put(col, codPdv);
                     pdvMap.put(col, pdv);
@@ -511,7 +535,10 @@ public class DepratiVentaService {
 
                 for (Map.Entry<Integer, String> entry : codPdvMap.entrySet()) {
                     int col = entry.getKey();
-                    String codPdv = entry.getValue();
+
+                    // ✅ APLICAR REGLA: placeholder para tienda vacía/null
+                    String codPdv = normalizarCodPdv(entry.getValue());
+
                     String pdv = pdvMap.get(col);
                     Double ventaUnidades = convertirADoubleSeguro(row.getCell(col), i + 1, col);
                     Double ventaUSD      = convertirADoubleSeguro(row.getCell(col + 1), i + 1, col + 1);
@@ -562,6 +589,7 @@ public class DepratiVentaService {
                 ensureClienteAttached(v, COD_CLIENTE_DEPRATI);
             }
             ventaService.guardarVentas(ventas);
+
             logger.info("Deprati: fin procesamiento filasLeidas=" + filasLeidas + " procesadas=" + filasProcesadas + " noEncontrados=" + codigosNoEncontrados.size());
             respuesta.put("mensaje", "✅ Se procesaron " + filasProcesadas + " registros de " + filasLeidas + " filas leídas.");
             respuesta.put("codigosNoEncontrados", codigosNoEncontrados);
@@ -582,7 +610,7 @@ public class DepratiVentaService {
         try {
             boolean ok = ventaService.cargarVentasDesdeExcel(archivo.getInputStream(), mapeoColumnas, filaInicio);
             return ok ? ResponseEntity.ok("Archivo procesado correctamente")
-                      : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el archivo");
+                    : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al procesar el archivo");
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error al leer el archivo: " + e.getMessage());
         }

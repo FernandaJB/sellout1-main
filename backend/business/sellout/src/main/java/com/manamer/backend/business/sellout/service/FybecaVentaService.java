@@ -35,6 +35,9 @@ public class FybecaVentaService {
     private static final ZoneId ZONE = ZoneId.systemDefault();
     private static final String CARPETA_CODIGOS = "/creacion-codigos";
 
+    // ✅ MISMA REGLA: placeholder para evitar mezclar tiendas vacías/null
+    private static final String PDV_PLACEHOLDER = "SIN_TIENDA";
+
     private final VentaRepository ventaRepository;
     private final EntityManager entityManager;
     private final ClienteService clienteService;
@@ -50,6 +53,16 @@ public class FybecaVentaService {
     private Cliente getClienteOrThrow(String codCliente) {
         return clienteService.findByCodCliente(codCliente)
                 .orElseThrow(() -> new IllegalStateException("Cliente no existe: " + codCliente));
+    }
+
+    /**
+     * ✅ MISMA REGLA:
+     * Normaliza codPdv para evitar que null/"" actualice registros de otra tienda.
+     */
+    private static String normalizarCodPdv(String codPdv) {
+        if (codPdv == null) return PDV_PLACEHOLDER;
+        String t = codPdv.trim();
+        return t.isEmpty() ? PDV_PLACEHOLDER : t;
     }
 
     // ====== Consultas CRUD ======
@@ -198,7 +211,10 @@ public class FybecaVentaService {
     public void guardarOActualizarVenta(Cliente cliente, Venta nuevaVenta) {
         nuevaVenta.setCliente(cliente); // ID real
         String codBarra = (nuevaVenta.getCodBarra() == null) ? null : nuevaVenta.getCodBarra().trim();
-        String codPdv   = (nuevaVenta.getCodPdv()   == null) ? null : nuevaVenta.getCodPdv().trim();
+
+        // ✅ MISMA REGLA: codPdv null/"" => "SIN_TIENDA"
+        String codPdv = normalizarCodPdv(nuevaVenta.getCodPdv());
+
         nuevaVenta.setCodBarra(codBarra);
         nuevaVenta.setCodPdv(codPdv);
 
@@ -226,6 +242,7 @@ public class FybecaVentaService {
             v.setDescripcion(nuevaVenta.getDescripcion());
             v.setProducto(nuevaVenta.getProducto());
             v.setCliente(cliente); // reafirma cliente/id
+            v.setCodPdv(normalizarCodPdv(v.getCodPdv())); // ✅ asegura consistencia también en el existente
             ventaRepository.save(v);
         } else {
             ventaRepository.save(nuevaVenta);

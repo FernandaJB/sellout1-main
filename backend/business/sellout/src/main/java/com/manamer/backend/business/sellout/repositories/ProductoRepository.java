@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.manamer.backend.business.sellout.models.Producto;
@@ -40,4 +42,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
         nativeQuery = true
     )
     List<Long> findReferencedProductoIdsInVentas(@org.springframework.data.repository.query.Param("ids") Collection<Long> ids);
+    
+    Optional<Producto> findByCodBarraSap(String codBarraSap);
+   
+    @Query("select p.id from Producto p where p.codBarraSap = :codBarraSap")
+        Optional<Long> findIdByCodBarraSap(@Param("codBarraSap") String codBarraSap);
+        
+    @Query("select p.codBarraSap as cod, p.id as id from Producto p where p.codBarraSap in :cods")
+        List<Object[]> findIdsByCodBarraSapIn(@Param("cods") Collection<String> cods);                               
 }
