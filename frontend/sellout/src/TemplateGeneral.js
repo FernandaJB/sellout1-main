@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import "./css/deprati.css";
 import * as XLSX from "xlsx";
@@ -33,7 +32,7 @@ const getFilenameFromCD = (cd) => {
 
 async function apiFetch(
   path,
-  { method = "GET", headers = {}, body, expect = "json", timeoutMs = 60000 } = {}
+  { method = "GET", headers = {}, body, expect = "json", timeoutMs = 300000 } = {}
 ) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
@@ -101,7 +100,6 @@ const MAX_DELETE = 2000;
 // ================= Helpers de Incidencias / Log TXT =================
 const TXT_HEADER = "CODIGOS_NO_ENCONTRADOS";
 
-// Normaliza arrays de errores en distintas formas a: [{codigo, motivo}]
 const normalizeErrores = (result) => {
   const toObj = (x, motivoFallback = "Motivo no especificado") =>
     typeof x === "object"
@@ -136,7 +134,6 @@ const normalizeErrores = (result) => {
   return [];
 };
 
-// Extrae contadores de filas desde un JSON flexible
 const extractCounts = (result) => {
   const r = result || {};
   const possible = (obj, keys, def = 0) => {
@@ -170,9 +167,7 @@ const extractCounts = (result) => {
   return { insertadas, actualizadas, ignoradas, conError, total, filasLeidas };
 };
 
-// ===== NUEVO: parser del TXT que devuelve el backend (para llenar los cuadros)
 const parseTemplateTxtSummary = (text) => {
-  // Sección [RESUMEN] con pares k=v
   const counts = { insertadas:0, actualizadas:0, ignoradas:0, conError:0, total:0, filasLeidas:"N/D" };
   const lines = (text || "").split(/\r?\n/);
   let inResumen = false;
@@ -198,16 +193,6 @@ const parseTemplateTxtSummary = (text) => {
   return counts;
 };
 
-// Construye solo la sección de incidencias (compatibilidad con tu formato actual)
-const buildTxtFromErrores = (errores) => {
-  const lines = [TXT_HEADER];
-  errores.forEach(({ codigo, motivo }) => {
-    lines.push(`(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`);
-  });
-  return lines.join("\n");
-};
-
-// ====== NUEVO: capturar mensajes de WARN/INCIDENCIAS del servidor ======
 const parseWarningsFromHeaders = (headers) => {
   if (!headers) return [];
   const keys = ["X-Process-Warnings", "X-Warnings", "X-Server-Warn", "X-Error-Message"];
@@ -242,14 +227,13 @@ const parseWarningsFromText = (text) => {
   return out;
 };
 
-const readBlobAsArrayBuffer = (blob) => {
-  return new Promise((resolve, reject) => {
+const readBlobAsArrayBuffer = (blob) =>
+  new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
     reader.onerror = reject;
     reader.readAsArrayBuffer(blob);
   });
-};
 
 const parseWarningsFromExcelBlob = async (blob) => {
   try {
@@ -274,7 +258,7 @@ const parseWarningsFromExcelBlob = async (blob) => {
       }
     });
     return Array.from(new Set(warnings));
-  } catch (e) {
+  } catch {
     return [];
   }
 };
@@ -294,7 +278,7 @@ const buildDetailedLogFybeca = ({
   const total = safe(counts.total);
   const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
   const tps = total ? (total / elapsedSec).toFixed(2) : "0.00";
-  const tpm = total ? (total * 60 / elapsedSec).toFixed(2) : "0.00";
+  const tpm = total ? ((total * 60) / elapsedSec).toFixed(2) : "0.00";
 
   const lines = [
     "LOG_CARGA_DETALLADO_TEMPLATE",
@@ -313,16 +297,13 @@ const buildDetailedLogFybeca = ({
     "RENDIMIENTO:",
     `  THROUGHPUT_filas_por_seg: ${tps}`,
     `  THROUGHPUT_filas_por_min: ${tpm}`,
+    "",
+    "INCIDENCIAS:",
   ];
 
   const inc = Array.isArray(incidencias) ? incidencias.filter(Boolean) : [];
-  lines.push("");
-  lines.push("INCIDENCIAS:");
-  if (inc.length) {
-    inc.forEach((t) => lines.push(`  ${t}`));
-  } else {
-    lines.push("  (sin incidencias)");
-  }
+  if (inc.length) inc.forEach((t) => lines.push(`  ${t}`));
+  else lines.push("  (sin incidencias)");
 
   return lines.join("\n");
 };
@@ -362,11 +343,8 @@ const buildIncidenciasTxt = ({ fileName, counts, errores, incidencias = [] }) =>
 
   lines.push("");
   lines.push("INCIDENCIAS_SERVIDOR:");
-  if (incidencias?.length) {
-    incidencias.forEach((t) => lines.push(`  ${t}`));
-  } else {
-    lines.push("  (sin incidencias)");
-  }
+  if (incidencias?.length) incidencias.forEach((t) => lines.push(`  ${t}`));
+  else lines.push("  (sin incidencias)");
 
   return lines.join("\n");
 };
@@ -374,7 +352,6 @@ const buildIncidenciasTxt = ({ fileName, counts, errores, incidencias = [] }) =>
 const saveTextFile = async (contenido, suggestedName = "log.txt") => {
   try {
     if (!window.showSaveFilePicker) {
-      // Fallback: descarga directa, pero idealmente usar navegadores compatibles con File System Access API
       const blob = new Blob([contenido], { type: "text/plain;charset=utf-8" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -417,6 +394,62 @@ const formatDuration = (ms) => {
   return m <= 0 ? `${ss}s` : `${m}:${ss} min`;
 };
 
+// =================== NUEVO: traer TODAS las ventas sin excepción ===================
+async function fetchAllVentas({ basePath = "/venta", query = {}, timeoutMs = 120000 } = {}) {
+  const BATCH = 5000;
+  let all = [];
+
+  // Intento #1: limit/offset
+  try {
+    let offset = 0;
+    while (true) {
+      const qs = new URLSearchParams();
+      Object.entries(query || {}).forEach(([k, v]) => {
+        if (v !== null && v !== undefined && String(v).trim() !== "") qs.set(k, String(v));
+      });
+      qs.set("limit", String(BATCH));
+      qs.set("offset", String(offset));
+
+      const { data } = await apiFetch(`${basePath}?${qs.toString()}`, { timeoutMs });
+      const chunk = Array.isArray(data) ? data : [];
+      all = all.concat(chunk);
+
+      if (chunk.length < BATCH) break;
+      offset += BATCH;
+    }
+    all._fromApi = true;
+    return all;
+  } catch (e1) {
+    // Intento #2: page/size (y soporte de {content: []})
+    try {
+      let page = 0;
+      while (true) {
+        const qs = new URLSearchParams();
+        Object.entries(query || {}).forEach(([k, v]) => {
+          if (v !== null && v !== undefined && String(v).trim() !== "") qs.set(k, String(v));
+        });
+        qs.set("size", String(BATCH));
+        qs.set("page", String(page));
+
+        const { data } = await apiFetch(`${basePath}?${qs.toString()}`, { timeoutMs });
+        const chunk = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : []);
+        all = all.concat(chunk);
+
+        if (chunk.length < BATCH) break;
+        page += 1;
+      }
+      all._fromApi = true;
+      return all;
+    } catch (e2) {
+      // Intento #3: un solo GET (si el backend sí devuelve todo)
+      const { data } = await apiFetch(basePath, { timeoutMs });
+      const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
+      return list;
+    }
+  }
+}
+
 const TemplateGeneral = () => {
   const toast = useRef(null);
   const fileInputRef = useRef(null);
@@ -455,7 +488,7 @@ const TemplateGeneral = () => {
   const uploadTimerRef = useRef(null);
   const elapsedTimerRef = useRef(null);
 
-  // === NUEVO: estados para guardar logs manualmente ===
+  // logs manuales
   const [logIncidenciasTxt, setLogIncidenciasTxt] = useState(null);
   const [logIncidenciasName, setLogIncidenciasName] = useState(null);
   const [logDetalladoTxt, setLogDetalladoTxt] = useState(null);
@@ -494,8 +527,7 @@ const TemplateGeneral = () => {
   }, [loadingTemplate]);
 
   const showToast = ({ type = "info", summary, detail, life = 3500 }) => {
-    if (!toast.current) return;
-    toast.current.show({ severity: type, summary, detail, life });
+    toast.current?.show({ severity: type, summary, detail, life });
   };
   const showSuccess = (m) => showToast({ type: "success", summary: "Éxito", detail: m });
   const showInfo = (m) => showToast({ type: "info", summary: "Información", detail: m });
@@ -511,6 +543,22 @@ const TemplateGeneral = () => {
     }
   };
 
+  const loadVentas = async () => {
+    setLoadingVentas(true);
+    try {
+      const list = await fetchAllVentas({ basePath: "/venta", query: {}, timeoutMs: 120000 });
+      setVentas(list);
+      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: list.length }));
+    } catch (e) {
+      console.error(e);
+      showError("Error al cargar ventas (todas).");
+      setVentas([]);
+      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
+    } finally {
+      setLoadingVentas(false);
+    }
+  };
+
   const loadYearsOptions = async () => {
     try {
       const { data } = await apiFetch("/anios-disponibles");
@@ -522,7 +570,7 @@ const TemplateGeneral = () => {
         .filter((o) => o.value !== null)
         .sort((a, b) => a.value - b.value);
       setYearsOptions(opts);
-    } catch (e) {
+    } catch {
       const years = [...new Set(ventas.map((v) => v.anio))]
         .filter(Number.isFinite)
         .sort((a, b) => a - b);
@@ -543,32 +591,25 @@ const TemplateGeneral = () => {
       const raw = Array.isArray(data) ? data : [];
       const months = raw
         .map((item) => {
-          const m = Number(
-            typeof item === "object" ? item?.mes ?? item?.month ?? item?.value : item
-          );
+          const m = Number(typeof item === "object" ? item?.mes ?? item?.month ?? item?.value : item);
           return Number.isFinite(m) ? m : null;
         })
         .filter((m) => m && m >= 1 && m <= 12)
         .sort((a, b) => a - b);
-      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map(
-        (m) => ({ label: monthLabel(m), value: m })
-      );
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => ({
+        label: monthLabel(m),
+        value: m,
+      }));
       setMonthsOptions(opts);
-    } catch (e) {
-      const months = [
-        ...new Set(ventas.filter((v) => v.anio === anio).map((v) => v.mes)),
-      ]
+    } catch {
+      const months = [...new Set(ventas.filter((v) => v.anio === anio).map((v) => v.mes))]
         .filter((m) => Number.isFinite(m) && m >= 1 && m <= 12)
         .sort((a, b) => a - b);
-      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map(
-        (m) => ({ label: monthLabel(m), value: m })
-      );
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => ({
+        label: monthLabel(m),
+        value: m,
+      }));
       setMonthsOptions(opts);
-      showInfo(
-        months.length
-          ? `Se encontraron ${months.length} meses con datos para el año ${anio}.`
-          : `No hay datos para el año ${anio}. Se muestran todos los meses.`
-      );
     }
   };
 
@@ -588,38 +629,16 @@ const TemplateGeneral = () => {
         })
         .filter(Boolean);
       setClientesOptions(opts);
-    } catch (e) {
+    } catch {
       const map = new Map();
       ventas.forEach((v) => {
         const code = v?.codCliente ?? (v?.cliente ? v.cliente.codCliente : null);
         const name = v?.nombreCliente ?? (v?.cliente ? v.cliente.nombreCliente : null);
-        if (code) {
-          map.set(String(code), name ? String(name) : String(code));
-        }
+        if (code) map.set(String(code), name ? String(name) : String(code));
       });
-      const opts = Array.from(map.entries()).map(([value, label]) => ({
-        label: `${value} - ${label}`,
-        value,
-      }));
-      setClientesOptions(opts);
-      showWarn("No se pudo cargar clientes desde API. Se muestran clientes presentes en datos.");
-    }
-  };
-
-  const loadVentas = async () => {
-    setLoadingVentas(true);
-    try {
-      const { data } = await apiFetch(`/venta`);
-      const list = Array.isArray(data) ? data : [];
-      list._fromApi = true;
-      setVentas(list);
-      setPaginatorState((p) => ({ ...p, first: 0, rows: p.rows, page: 0, totalRecords: list.length }));
-    } catch (e) {
-      showError("Error al cargar ventas");
-      setVentas([]);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
-    } finally {
-      setLoadingVentas(false);
+      setClientesOptions(
+        Array.from(map.entries()).map(([value, label]) => ({ label: `${value} - ${label}`, value }))
+      );
     }
   };
 
@@ -634,25 +653,8 @@ const TemplateGeneral = () => {
     [appliedFilters]
   );
 
-  const buildQuery = (f) => {
-    const params = new URLSearchParams();
-    if (f.year !== null) params.set("anio", String(f.year));
-    if (f.month !== null) params.set("mes", String(f.month));
-    if (f.marca) params.set("marca", f.marca);
-    if (f.cliente) params.set("codCliente", String(f.cliente));
-    if (f.dateFrom) {
-      const d = new Date(f.dateFrom);
-      params.set("fechaDesde", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-    }
-    if (f.dateTo) {
-      const d = new Date(f.dateTo);
-      params.set("fechaHasta", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-    }
-    return params.toString();
-  };
-
-  const filterLocalData = (data, f) => {
-    return data.filter((item) => {
+  const filterLocalData = (data, f) =>
+    data.filter((item) => {
       if (f.year !== null && Number(item.anio) !== Number(f.year)) return false;
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
@@ -675,17 +677,26 @@ const TemplateGeneral = () => {
       }
       return true;
     });
-  };
 
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const qsBase = buildQuery(f);
-      const qs = qsBase ? new URLSearchParams(qsBase) : null;
-      const path = qs ? `/venta?${qs.toString()}` : `/venta`;
-      const { data } = await apiFetch(path);
-      const list = Array.isArray(data) ? data : [];
-      list._fromApi = true;
+      const query = {};
+      if (f.year !== null) query.anio = f.year;
+      if (f.month !== null) query.mes = f.month;
+      if (f.marca) query.marca = f.marca;
+      if (f.cliente) query.codCliente = f.cliente;
+
+      if (f.dateFrom) {
+        const d = new Date(f.dateFrom);
+        query.fechaDesde = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+      if (f.dateTo) {
+        const d = new Date(f.dateTo);
+        query.fechaHasta = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      const list = await fetchAllVentas({ basePath: "/venta", query, timeoutMs: 120000 });
       setVentas(list);
       setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
@@ -703,55 +714,44 @@ const TemplateGeneral = () => {
 
   useEffect(() => {
     loadMarcas();
-    loadYearsOptions();
     loadVentas();
-    loadClientesOptions();
   }, []);
+
+  useEffect(() => {
+    loadYearsOptions();
+  }, [ventas?.length]);
+
+  useEffect(() => {
+    loadClientesOptions();
+  }, [ventas?.length]);
 
   useEffect(() => {
     setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
   }, [appliedFilters, globalFilter]);
 
-  useEffect(() => {
-    if (!clientesOptions || clientesOptions.length === 0) {
-      const map = new Map();
-      ventas.forEach((v) => {
-        const code = v?.codCliente ?? (v?.cliente ? v.cliente.codCliente : null);
-        const name = v?.nombreCliente ?? (v?.cliente ? v.cliente.nombreCliente : null);
-        if (code) {
-          map.set(String(code), name ? String(name) : String(code));
-        }
-      });
-      const opts = Array.from(map.entries()).map(([value, label]) => ({
-        label: `${value} - ${label}`,
-        value,
-      }));
-      setClientesOptions(opts);
-    }
-  }, [ventas, clientesOptions]);
-
   const onPageChange = async (e) => {
     setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }));
   };
 
+  // OJO: este DataTable usa filteredData, que sale de "ventas" + globalFilter
   const filteredData = useMemo(() => {
     let base = [...ventas];
-    if (hasAnyApplied && !base._fromApi) {
-      base = filterLocalData(base, appliedFilters);
-    }
+    if (hasAnyApplied && !base._fromApi) base = filterLocalData(base, appliedFilters);
+
     if (globalFilter?.trim()) {
       const lowered = globalFilter.toLowerCase();
       base = base.filter((item) =>
         Object.values(item).some((val) =>
           typeof val === "object" && val !== null
-            ? Object.values(val).some((v2) => v2?.toString().toLowerCase().includes(lowered))
-            : val?.toString().toLowerCase().includes(lowered)
+            ? Object.values(val).some((v2) => v2?.toString?.().toLowerCase().includes(lowered))
+            : val?.toString?.().toLowerCase().includes(lowered)
         )
       );
     }
     return base;
   }, [ventas, hasAnyApplied, appliedFilters, globalFilter]);
 
+  // ======================= SUBIR TEMPLATE =======================
   const cargarTemplate = async (file) => {
     if (!file) return showWarn("No seleccionaste ningún archivo.");
     const ext = file.name.split(".").pop().toLowerCase();
@@ -760,12 +760,10 @@ const TemplateGeneral = () => {
     setLoadingTemplate(true);
     setUploadElapsedMs(0);
 
-    const controllerTimeoutMs = 30 * 60 * 1000;
     let erroresNormalizados = [];
     let counts = { insertadas:0, actualizadas:0, ignoradas:0, conError:0, total:0, filasLeidas: "N/D" };
     let incidenciasServidor = [];
 
-    // limpiar logs previos
     setLogIncidenciasTxt(null);
     setLogIncidenciasName(null);
     setLogDetalladoTxt(null);
@@ -785,6 +783,8 @@ const TemplateGeneral = () => {
     try {
       const formData = new FormData();
       formData.append("file", file);
+
+      const controllerTimeoutMs = 30 * 60 * 1000;
 
       const res = await fetch(`${API_BASE}/subir-archivo-template-general`, {
         method: "POST",
@@ -808,9 +808,7 @@ const TemplateGeneral = () => {
       incidenciasServidor = parseWarningsFromHeaders(res.headers);
 
       if (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
-        // El backend devolvió un Excel con incidencias u observaciones.
         const blob = await res.blob();
-        // Descargamos directamente el Excel (no es TXT). El usuario puede elegir carpeta con el diálogo del navegador.
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -833,18 +831,11 @@ const TemplateGeneral = () => {
         const warnFields = ["warnings", "mensajes", "logs", "serverLogs"];
         warnFields.forEach((k) => {
           const v = result?.[k];
-          if (Array.isArray(v)) {
-            v.forEach((t) => {
-              const s = String(t || "").trim();
-              if (s) incidenciasServidor.push(s);
-            });
-          } else if (typeof v === "string" && v.trim()) {
-            incidenciasServidor.push(v.trim());
-          }
+          if (Array.isArray(v)) v.forEach((t) => t && incidenciasServidor.push(String(t).trim()));
+          else if (typeof v === "string" && v.trim()) incidenciasServidor.push(v.trim());
         });
         incidenciasServidor = Array.from(new Set([...(incidenciasServidor || []), ...parseWarningsFromHeaders(res.headers)]));
 
-        // Construimos texto de incidencias pero NO lo descargamos automáticamente.
         const now = new Date();
         const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
         const incidenciasTxt = buildIncidenciasTxt({
@@ -858,7 +849,6 @@ const TemplateGeneral = () => {
 
         showSuccess("Archivo procesado correctamente. Usa 'Guardar Incidencias' para elegir dónde guardar el TXT.");
       } else if (contentType.includes("text/plain")) {
-        // El backend retornó TXT crudo -> lo guardamos en estado para guardado manual
         const text = await res.text();
         const cnt = parseTemplateTxtSummary(text);
         counts = { ...counts, ...cnt };
@@ -872,14 +862,13 @@ const TemplateGeneral = () => {
         showInfo(text?.substring(0, 200) || "Procesado.");
       }
 
-      // Fin de la llamada; recargamos ventas según filtros
+      // Después de cargar template: RECARGAR TODAS las ventas (o filtradas si hay filtros)
       await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
 
-      // Construir log detallado y dejarlo listo para guardar manualmente
       const end = performance.now();
       const elapsedMs = Math.max(0, Math.round(end - start));
 
-      const detailedLogFybeca = buildDetailedLogFybeca({
+      const detailedLog = buildDetailedLogFybeca({
         fileName: file.name,
         fileSizeBytes: file.size,
         estMs,
@@ -887,32 +876,26 @@ const TemplateGeneral = () => {
         counts,
         incidencias: incidenciasServidor,
       });
-      setLogDetalladoTxt(detailedLogFybeca);
+      setLogDetalladoTxt(detailedLog);
       const now2 = new Date();
       const fechaStr2 = now2.toISOString().replace(/[:T]/g, "-").split(".")[0];
       setLogDetalladoName(`log_detallado_template_general_${fechaStr2}.txt`);
 
-      // TOAST con info + instrucción para guardar manualmente
       toast.current?.show({
         severity: (counts.conError || incidenciasServidor.length) ? "warn" : "success",
         summary: "Carga finalizada",
         detail: (
           <div className="flex flex-column gap-2" style={{ lineHeight: 1.4 }}>
-            <div><b>Listo:</b> ahora puedes guardar los archivos desde los botones <b>Guardar Incidencias</b> y <b>Guardar Log detallado</b> en la barra.</div>
-            {incidenciasServidor?.length > 0 && (
-              <div style={{ marginTop: "0.5rem" }}>
-                <div className="font-bold">Incidencias reportadas por el servidor:</div>
-                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                  {incidenciasServidor.slice(0, 5).map((t, i) => <li key={i} style={{ whiteSpace: "pre-wrap" }}>{t}</li>)}
-                  {incidenciasServidor.length > 5 && <li>... ({incidenciasServidor.length - 5} más)</li>}
-                </ul>
-              </div>
-            )}
+            <div>
+              <b>Listo:</b> ahora puedes guardar los archivos desde <b>Guardar Incidencias</b> y <b>Guardar Log detallado</b>.
+            </div>
+            <div>
+              Insertadas: <b>{counts.insertadas}</b> | Actualizadas: <b>{counts.actualizadas}</b> | Ignoradas: <b>{counts.ignoradas}</b> | Error: <b>{counts.conError}</b>
+            </div>
           </div>
         ),
         sticky: true,
       });
-
     } catch (e) {
       showError(String(e?.message || e));
     } finally {
@@ -998,7 +981,7 @@ const TemplateGeneral = () => {
           showSuccess("Ventas eliminadas correctamente");
           setSelectedVentas([]);
           await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
-        } catch (e) {
+        } catch {
           showError("Error al eliminar las ventas");
         }
       },
@@ -1096,37 +1079,27 @@ const TemplateGeneral = () => {
   const onSelectionChange = (e) => {
     const next = Array.isArray(e.value) ? e.value : [];
     if (next.length > MAX_DELETE) {
-      const trimmed = next.slice(0, MAX_DELETE);
-      setSelectedVentas(trimmed);
+      setSelectedVentas(next.slice(0, MAX_DELETE));
       showWarn(`Solo puedes seleccionar hasta ${MAX_DELETE.toLocaleString()} registros para eliminar.`);
-    } else {
-      setSelectedVentas(next);
-    }
+    } else setSelectedVentas(next);
   };
 
-  // Handlers de guardado manual de logs
   const handleSaveIncidencias = async () => {
-    if (!logIncidenciasTxt) {
-      showWarn("No hay incidencias generadas todavía.");
-      return;
-    }
+    if (!logIncidenciasTxt) return showWarn("No hay incidencias generadas todavía.");
     try {
       const ok = await saveTextFile(logIncidenciasTxt, logIncidenciasName || "incidencias_template_general.txt");
       if (ok) showSuccess("Incidencias guardadas.");
-    } catch (e) {
+    } catch {
       showError("No se pudo guardar el archivo de incidencias.");
     }
   };
 
   const handleSaveLogDetallado = async () => {
-    if (!logDetalladoTxt) {
-      showWarn("No hay log detallado generado todavía.");
-      return;
-    }
+    if (!logDetalladoTxt) return showWarn("No hay log detallado generado todavía.");
     try {
       const ok = await saveTextFile(logDetalladoTxt, logDetalladoName || "log_detallado_template_general.txt");
       if (ok) showSuccess("Log detallado guardado.");
-    } catch (e) {
+    } catch {
       showError("No se pudo guardar el log detallado.");
     }
   };
@@ -1160,13 +1133,13 @@ const TemplateGeneral = () => {
                     label="Importar Excel"
                     icon="pi pi-upload"
                     className="p-button-help"
-                    onClick={() => fileInputRef.current.click()}
+                    onClick={() => fileInputRef.current?.click()}
                   />
                   <input
                     type="file"
                     accept=".xlsx,.xls"
                     onChange={(e) => {
-                      if (e.target.files.length > 0) {
+                      if (e.target.files?.length > 0) {
                         cargarTemplate(e.target.files[0]);
                         e.target.value = "";
                       }
@@ -1193,7 +1166,6 @@ const TemplateGeneral = () => {
                     className="p-button-success"
                     onClick={downloadFilteredVentasReport}
                   />
-                  {/* NUEVOS BOTONES: guardado manual */}
                   <Button
                     label="Guardar Incidencias"
                     icon="pi pi-save"
@@ -1219,11 +1191,9 @@ const TemplateGeneral = () => {
             <Card className="deprati-filter-card mb-3">
               <h3 className="deprati-section-title text-primary mb-3">Filtros de Búsqueda</h3>
               <div className="grid formgrid">
-              <div className="flex flex-wrap gap-8 align-items-end">
-                <div className="field">
-                  <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">
-                    Año
-                  </label>
+                <div className="flex flex-wrap gap-8 align-items-end">
+                  <div className="field">
+                    <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">Año</label>
                     <Dropdown
                       id="filterYear"
                       value={filterYear}
@@ -1240,9 +1210,7 @@ const TemplateGeneral = () => {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="filterMonth" className="deprati-label font-bold block mb-2">
-                      Mes
-                    </label>
+                    <label htmlFor="filterMonth" className="deprati-label font-bold block mb-2">Mes</label>
                     <Dropdown
                       id="filterMonth"
                       value={filterMonth}
@@ -1252,40 +1220,34 @@ const TemplateGeneral = () => {
                       className="deprati-dropdown w-12rem"
                       disabled={filterYear == null || monthsOptions.length === 0}
                     />
-                </div>
+                  </div>
 
-                <div className="field">
-                  <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
-                    Marca
-                  </label>
-                  <Dropdown
-                    id="filterMarca"
-                    value={filterMarca}
-                    options={marcas.map((m) => ({ label: m, value: m }))}
-                    onChange={(e) => setFilterMarca(e.value)}
-                    placeholder="Seleccionar Marca"
-                    className="deprati-dropdown w-12rem"
-                  />
-                </div>
+                  <div className="field">
+                    <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">Marca</label>
+                    <Dropdown
+                      id="filterMarca"
+                      value={filterMarca}
+                      options={marcas.map((m) => ({ label: m, value: m }))}
+                      onChange={(e) => setFilterMarca(e.value)}
+                      placeholder="Seleccionar Marca"
+                      className="deprati-dropdown w-12rem"
+                    />
+                  </div>
 
-                <div className="field">
-                  <label htmlFor="filterCliente" className="deprati-label font-bold block mb-2">
-                    Cliente
-                  </label>
-                  <Dropdown
-                    id="filterCliente"
-                    value={filterCliente}
-                    options={clientesOptions}
-                    onChange={(e) => setFilterCliente(e.value)}
-                    placeholder="Seleccionar Cliente"
-                    className="deprati-dropdown w-16rem"
-                  />
-                </div>
+                  <div className="field">
+                    <label htmlFor="filterCliente" className="deprati-label font-bold block mb-2">Cliente</label>
+                    <Dropdown
+                      id="filterCliente"
+                      value={filterCliente}
+                      options={clientesOptions}
+                      onChange={(e) => setFilterCliente(e.value)}
+                      placeholder="Seleccionar Cliente"
+                      className="deprati-dropdown w-16rem"
+                    />
+                  </div>
 
-                <div className="field">
-                  <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">
-                    Rango de Fecha
-                  </label>
+                  <div className="field">
+                    <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">Rango de Fecha</label>
                     <Calendar
                       id="filterDateRange"
                       value={filterDateRange}
@@ -1298,9 +1260,9 @@ const TemplateGeneral = () => {
                       showIcon
                       inputClassName="text-black font-bold"
                     />
+                  </div>
                 </div>
               </div>
-            </div>
 
               <Divider className="deprati-divider" />
               <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
@@ -1327,6 +1289,7 @@ const TemplateGeneral = () => {
               rowsPerPageOptions={[50, 100, 150, 200]}
               first={paginatorState.first}
               onPage={onPageChange}
+              totalRecords={filteredData.length}
               paginatorClassName="p-3 deprati-square-paginator"
               paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
               currentPageReportTemplate={`Mostrando {first} a {last} de {totalRecords} registros`}
@@ -1378,9 +1341,9 @@ const TemplateGeneral = () => {
                 body={(r) => r.ciudad || (r.cliente ? r.cliente.ciudad : "N/A")}
               />
               <Column field="ventaUnidad" header="Venta Unidades" sortable body={(r) => Number(r.ventaUnidad ?? 0)} />
-              <Column field="ventaDolares" header="Venta $" sortable body={(r) => (Number(r.ventaDolares ?? 0)).toFixed(2)} />
+              <Column field="ventaDolares" header="Venta $" sortable body={(r) => Number(r.ventaDolares ?? 0).toFixed(2)} />
               <Column field="stockUnidades" header="Stock Unidades" sortable body={(r) => Number(r.stockUnidades ?? 0)} />
-              <Column field="stockDolares" header="Stock $" sortable body={(r) => (Number(r.stockDolares ?? 0)).toFixed(2)} />
+              <Column field="stockDolares" header="Stock $" sortable body={(r) => Number(r.stockDolares ?? 0).toFixed(2)} />
               <Column
                 header="Acciones"
                 body={(rowData) => (
@@ -1503,9 +1466,7 @@ const TemplateGeneral = () => {
                       placeholder="Seleccionar Marca"
                       className={`w-full custom-dropdown ${!editVenta?.marca ? "p-invalid" : ""}`}
                     />
-                    <label htmlFor="marca" style={{ fontSize: "1rem" }}>
-                      Marca
-                    </label>
+                    <label htmlFor="marca" style={{ fontSize: "1rem" }}>Marca</label>
                   </span>
                   {!editVenta?.marca && <small className="p-error">La marca es requerida</small>}
                 </div>
@@ -1520,9 +1481,7 @@ const TemplateGeneral = () => {
                         className="w-full"
                         inputStyle={{ fontSize: "0.85rem", padding: "0.85rem", height: "3.2rem" }}
                       />
-                      <label htmlFor={id} style={{ fontSize: "1rem" }}>
-                        {id.toUpperCase()}
-                      </label>
+                      <label htmlFor={id} style={{ fontSize: "1rem" }}>{id.toUpperCase()}</label>
                     </span>
                   </div>
                 ))}
@@ -1551,9 +1510,7 @@ const TemplateGeneral = () => {
                         minFractionDigits={mode === "decimal" ? 2 : 0}
                         maxFractionDigits={mode === "decimal" ? 2 : 0}
                       />
-                      <label htmlFor={id} style={{ fontSize: "1rem" }}>
-                        {label}
-                      </label>
+                      <label htmlFor={id} style={{ fontSize: "1rem" }}>{label}</label>
                     </span>
                   </div>
                 ))}

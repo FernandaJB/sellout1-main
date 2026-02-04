@@ -46,20 +46,24 @@ public class ClienteService {
             return out;
         }
 
-        try (InputStream is = file.getInputStream(); Workbook wb = new XSSFWorkbook(is)) {
-            Sheet sheet = wb.getSheetAt(0);
+        try (Workbook wb = com.monitorjbl.xlsx.StreamingReader.builder()
+                .rowCacheSize(100)
+                .bufferSize(4096)
+                .open(file.getInputStream())) {
+            
+            Sheet sheet = null;
+            for (Sheet s : wb) { sheet = s; break; }
             if (sheet == null) {
                 out.put("error", "La primera hoja del Excel está vacía.");
                 return out;
             }
 
-            Row header = sheet.getRow(0);
-            Map<String, Integer> headerIndex = readHeaderMap(header);
-            if (headerIndex.isEmpty()) {
-                out.put("error", "No se detectaron encabezados en la fila 1.");
-                return out;
-            }
-
+            Map<String, Integer> headerIndex = null;
+            Integer colCod = null;
+            Integer colNom = null;
+            Integer colCiu = null;
+            Integer colProv = null;
+            
             Map<String, String> aliases = Map.of(
                 "codcliente", "codCliente",
                 "codigo cliente", "codCliente",
@@ -72,18 +76,6 @@ public class ClienteService {
                 "codigo proveedor", "codigoProveedor"
             );
 
-            Integer colCod  = findCol(headerIndex, aliases, "codCliente");
-            Integer colNom  = findCol(headerIndex, aliases, "nombreCliente");
-            Integer colCiu  = findCol(headerIndex, aliases, "ciudad");
-            Integer colProv = findCol(headerIndex, aliases, "codigoProveedor");
-
-            if (colCod == null || colNom == null) {
-                out.put("error", "Faltan columnas requeridas: 'codCliente' y/o 'nombreCliente'.");
-                return out;
-            }
-
-            DataFormatter fmt = new DataFormatter();
-
             // 1) Cache de pares existentes en BD (NORMALIZADOS): COD|NOMBRE
             Set<String> paresExistentes = repository.findAll().stream()
                 .filter(c -> c.getCodCliente() != null && c.getNombreCliente() != null)
@@ -93,15 +85,38 @@ public class ClienteService {
             // 2) Control de duplicados dentro del mismo archivo (para no intentar dos veces)
             Set<String> paresVistosEnArchivo = new HashSet<>();
 
-            int last = sheet.getLastRowNum();
-            for (int r = 1; r <= last; r++) {
-                Row row = sheet.getRow(r);
-                if (row == null) continue;
+            DataFormatter fmt = new DataFormatter();
+            List<Cliente> buffer = new ArrayList<>();
+            final int BATCH_SIZE = 1000;
 
-                String codClienteRaw   = clean(fmt.formatCellValue(row.getCell(colCod)));
-                String nombreCliente   = clean(fmt.formatCellValue(row.getCell(colNom)));
-                String ciudad          = (colCiu  != null) ? clean(fmt.formatCellValue(row.getCell(colCiu)))  : null;
-                String codigoProveedor = (colProv != null) ? clean(fmt.formatCellValue(row.getCell(colProv))) : null;
+            for (Row row : sheet) {
+                if (row.getRowNum() == 0) {
+                    headerIndex = readHeaderMap(row);
+                    if (headerIndex.isEmpty()) {
+                        out.put("error", "No se detectaron encabezados en la fila 1.");
+                        return out;
+                    }
+                    colCod  = findCol(headerIndex, aliases, "codCliente");
+                    colNom  = findCol(headerIndex, aliases, "nombreCliente");
+                    colCiu  = findCol(headerIndex, aliases, "ciudad");
+                    colProv = findCol(headerIndex, aliases, "codigoProveedor");
+
+                    if (colCod == null || colNom == null) {
+                        out.put("error", "Faltan columnas requeridas: 'codCliente' y/o 'nombreCliente'.");
+                        return out;
+                    }
+                    continue;
+                }
+                
+                // Si no se encontraron encabezados, no procesar filas
+                if (headerIndex == null) continue;
+
+                int r = row.getRowNum();
+                
+                String codClienteRaw   = clean(getStringFromCell(row.getCell(colCod)));
+                String nombreCliente   = clean(getStringFromCell(row.getCell(colNom)));
+                String ciudad          = (colCiu  != null) ? clean(getStringFromCell(row.getCell(colCiu)))  : null;
+                String codigoProveedor = (colProv != null) ? clean(getStringFromCell(row.getCell(colProv))) : null;
 
                 if (isBlank(codClienteRaw) && isBlank(nombreCliente)) {
                     continue; // fila vacía
@@ -130,19 +145,28 @@ public class ClienteService {
                     continue;
                 }
 
-                // >>> En este punto el PAR NO existe: crear SIEMPRE un NUEVO cliente,
-                //     aunque exista el mismo código con OTRO nombre.
+                // >>> En este punto el PAR NO existe: crear SIEMPRE un NUEVO cliente
                 Cliente nuevo = new Cliente();
                 nuevo.setCodCliente(codClienteRaw.trim());
                 nuevo.setNombreCliente(nombreCliente.trim());
                 if (!isBlank(ciudad))          nuevo.setCiudad(ciudad);
                 if (!isBlank(codigoProveedor)) nuevo.setCodigoProveedor(codigoProveedor);
 
-                repository.save(nuevo);
+                buffer.add(nuevo);
                 inserted++;
 
                 // Añadir a cache para que próximas filas lo vean como existente
                 paresExistentes.add(par);
+                
+                if (buffer.size() >= BATCH_SIZE) {
+                    repository.saveAll(buffer);
+                    buffer.clear();
+                }
+            }
+            
+            if (!buffer.isEmpty()) {
+                repository.saveAll(buffer);
+                buffer.clear();
             }
 
         } catch (Exception e) {
@@ -157,6 +181,15 @@ public class ClienteService {
         out.put("errors", errors);
         out.put("warnings", warnings);
         return out;
+    }
+
+    private String getStringFromCell(Cell cell) {
+        if (cell == null) return "";
+        try {
+            return cell.getStringCellValue();
+        } catch (Exception e) {
+            return cell.toString();
+        }
     }
 
     // === Helpers de normalización para la CLAVE del PAR ===

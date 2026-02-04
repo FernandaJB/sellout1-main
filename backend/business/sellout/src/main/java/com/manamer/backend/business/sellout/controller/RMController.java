@@ -13,6 +13,11 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @CrossOrigin(origins = "*", allowedHeaders = "*")
@@ -23,7 +28,7 @@ public class RMController {
 
     private final RMService rmService;
 
-    private static final String DEFAULT_COD_CLIENTE = "MZCL-000008";
+    private static final String DEFAULT_COD_CLIENTE = "MZCL-003131";
 
     @Autowired
     public RMController(RMService rmService) {
@@ -125,6 +130,22 @@ public class RMController {
                     "error", "Error al obtener ventas: " + e.getMessage()
             ));
         }
+    }
+
+    @GetMapping("/reporte-ventas")
+    public ResponseEntity<StreamingResponseBody> reporteVentasZip(
+            @RequestParam(value = "codCliente", required = false) String codCliente,
+            @RequestParam(value = "anio", required = false) Integer anio,
+            @RequestParam(value = "mes", required = false) Integer mes,
+            @RequestParam(value = "marca", required = false) String marca
+    ) {
+        String cod = resolveCodCliente(codCliente);
+        String filename = "rm_ventas_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
+        StreamingResponseBody body = outputStream -> rmService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(body);
     }
 
     // ==========================================================

@@ -5,16 +5,14 @@ import com.manamer.backend.business.sellout.models.ExcelUtils;
 import com.manamer.backend.business.sellout.models.Producto;
 import com.manamer.backend.business.sellout.models.TipoMueble;
 import com.manamer.backend.business.sellout.models.Venta;
-import com.manamer.backend.business.sellout.service.*;
+import com.manamer.backend.business.sellout.service.ClienteService;
 import com.manamer.backend.business.sellout.service.FybecaVentaService;
 import com.manamer.backend.business.sellout.service.ProductoService;
 import com.manamer.backend.business.sellout.service.TipoMuebleService;
 
-import org.apache.commons.io.output.ByteArrayOutputStream;
-import org.apache.poi.hssf.usermodel.HSSFWorkbook;
-import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +23,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+import java.io.InputStream;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,7 +39,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/api-sellout/fybeca")
 public class FybecaController {
 
-    /** Default correcto */
     private static final String DEFAULT_COD_CLIENTE = "MZCL-000014";
     private static final int DELETE_BATCH_SIZE = 5000;
 
@@ -79,54 +82,6 @@ public class FybecaController {
                 .replaceAll("[\\.,\"']", "");
     }
 
-    private Workbook obtenerWorkbookCorrecto(MultipartFile file) throws IOException {
-        String nombreArchivo = file.getOriginalFilename();
-        if (nombreArchivo != null && nombreArchivo.toLowerCase().endsWith(".xls")) {
-            return new HSSFWorkbook(file.getInputStream());
-        } else {
-            return new XSSFWorkbook(file.getInputStream());
-        }
-    }
-
-    private <T> T obtenerValorCelda(Cell cell, Class<T> clazz) {
-        if (cell == null) {
-            if (clazz == Integer.class) return clazz.cast(0);
-            if (clazz == Double.class) return clazz.cast(0.0);
-            return null;
-        }
-        try {
-            switch (cell.getCellType()) {
-                case NUMERIC:
-                    if (clazz == Integer.class) return clazz.cast((int) cell.getNumericCellValue());
-                    if (clazz == Double.class) return clazz.cast(cell.getNumericCellValue());
-                    if (clazz == String.class) return clazz.cast(String.valueOf((int) cell.getNumericCellValue()));
-                    break;
-                case STRING:
-                    String value = cell.getStringCellValue().trim();
-                    if (clazz == Integer.class) {
-                        try { return clazz.cast(Integer.parseInt(value)); } catch (NumberFormatException e) { return clazz.cast(0); }
-                    } else if (clazz == Double.class) {
-                        try { return clazz.cast(Double.parseDouble(value)); } catch (NumberFormatException e) { return clazz.cast(0.0); }
-                    } else {
-                        return clazz.cast(value);
-                    }
-                case BLANK:
-                    if (clazz == Integer.class) return clazz.cast(0);
-                    if (clazz == Double.class) return clazz.cast(0.0);
-                    return null;
-                default:
-                    if (clazz == Integer.class) return clazz.cast(0);
-                    if (clazz == Double.class) return clazz.cast(0.0);
-                    return null;
-            }
-        } catch (Exception e) {
-            logger.error("Error al convertir celda: {}", cell, e);
-            if (clazz == Integer.class) return clazz.cast(0);
-            if (clazz == Double.class) return clazz.cast(0.0);
-        }
-        return null;
-    }
-
     // ---------- Ventas ----------
 
     @GetMapping("/venta")
@@ -143,7 +98,6 @@ public class FybecaController {
         return ResponseEntity.ok(res);
     }
 
-    /** Obtener por id — acepta ?codCliente=... */
     @GetMapping("/venta/{id}")
     public ResponseEntity<Venta> obtenerVentaPorId(@PathVariable Long id,
                                                    @RequestParam(required = false) String codCliente) {
@@ -151,24 +105,6 @@ public class FybecaController {
         return fybecaService.obtenerVentaPorIdYCodCliente(id, cod)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    /** Actualizar venta — fuerza el cliente con ID real */
-    @PutMapping("/venta/{id}")
-    public ResponseEntity<Venta> actualizarVenta(@PathVariable Long id,
-                                                 @RequestParam(required = false) String codCliente,
-                                                 @RequestBody Venta nuevaVenta) {
-        try {
-            String cod = resolveCodCliente(codCliente);
-            var clienteOpt = clienteService.findByCodCliente(cod);
-            if (clienteOpt.isEmpty()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-            nuevaVenta.setCliente(clienteOpt.get()); // garantiza cliente_id correcto
-
-            Venta ventaActualizada = fybecaService.actualizarVentaPorCodCliente(id, cod, nuevaVenta);
-            return ResponseEntity.ok(ventaActualizada);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
-        }
     }
 
     @DeleteMapping("/venta/{id}")
@@ -181,7 +117,7 @@ public class FybecaController {
         }
     }
 
-    // >>> Borrado masivo en lotes de 5000 <<<
+    // >>> Borrado masivo en lotes <<<
     @DeleteMapping("/ventas-forma-masiva")
     public ResponseEntity<Void> eliminarVentas(@RequestBody List<Long> ids) {
         if (ids == null || ids.isEmpty()) return ResponseEntity.ok().build();
@@ -196,150 +132,65 @@ public class FybecaController {
             }
         }
         return (fallidos == 0) ? ResponseEntity.ok().build()
-                               : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+                : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
 
     /**
-     * Subida flexible de ventas:
-     * - Detecta columnas por encabezado.
-     * - Resuelve Cliente (ID real) y lo asigna a cada venta.
-     * - Enriquecimiento con cargarDatosDeProducto(Cliente,...).
-     * - Upsert con guardarOActualizarVenta(Cliente,...).
-     * - Devuelve TXT con códigos no encontrados.
+     * ✅ NUEVO (CORRECTO):
+     * Subida de ventas usando el FybecaVentaService "INSERT ONLY".
+     *
+     * - No parsea el Excel aquí (toda la lógica está en el service)
+     * - Devuelve resultado con filas leídas, insertadas y codigos no encontrados.
      */
     @PostMapping("/subir-archivo-venta")
-    public ResponseEntity<Map<String, Object>> subirArchivoVentaFlexible(@RequestParam("file") MultipartFile file,
-                                                                         @RequestParam(required = false) String codCliente) {
+    public ResponseEntity<Map<String, Object>> subirArchivoVenta(@RequestParam("file") MultipartFile file,
+                                                                 @RequestParam(required = false) String codCliente) {
         String cod = resolveCodCliente(codCliente);
-        logger.info("Inicio de carga de archivo de ventas: {} para codCliente={}", file.getOriginalFilename(), cod);
 
-        Set<String> codigosNoEncontrados = new HashSet<>();
-        List<Map<String, Object>> detalleNoEncontrados = new ArrayList<>();
-        if (file.isEmpty()) {
-            logger.warn("El archivo recibido está vacío.");
-            return ResponseEntity.badRequest().build();
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "message", "El archivo está vacío."
+            ));
         }
 
-        try (Workbook workbook = obtenerWorkbookCorrecto(file)) {
+        try {
+            // Validar que exista cliente
             var clienteOpt = clienteService.findByCodCliente(cod);
             if (clienteOpt.isEmpty()) {
-                logger.error("Cliente con codCliente {} no existe", cod);
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-            }
-            final Cliente clienteCarga = clienteOpt.get(); // ID real
-
-            Sheet sheet = workbook.getSheetAt(0);
-            Row encabezado = sheet.getRow(0);
-            if (encabezado == null) throw new IllegalArgumentException("La primera fila (encabezados) está vacía.");
-
-            Map<String, List<String>> camposEsperados = new HashMap<>();
-            camposEsperados.put("anio", List.of("año", "anio", "Año"));
-            camposEsperados.put("mes", List.of("mes", "Mes"));
-            camposEsperados.put("codBarra", List.of("codigo barra", "cod_barra", "codigobarra", "COD ITEM", "cod barra", "codbarra"));
-            camposEsperados.put("codPdv", List.of("codigo pdv", "cod_pdv", "COD LOCAL", "cod pdv"));
-            camposEsperados.put("pdv", List.of("pdv", "NOMBRE LOCAL", "nombre pdv"));
-            camposEsperados.put("ventaDolares", List.of("venta_dolares", "venta $", "venta dolares", "Venta Dolares", "venta usd"));
-            camposEsperados.put("ventaUnidad", List.of("venta_unidades", "venta unidades", "Venta Unidades"));
-            camposEsperados.put("stockDolares", List.of("stock_dolares", "stock usd", "Stock Dolares", "stock dolares"));
-            camposEsperados.put("stockUnidades", List.of("stock_unidades", "stock unidades", "Stock en Unidades"));
-            camposEsperados.put("marca", List.of("marca", "Marca"));
-            camposEsperados.put("nombreProducto", List.of("producto", "nombre producto", "Nombre Producto"));
-            camposEsperados.put("descripcion", List.of("descripcion", "Descripción"));
-            Map<String, Integer> columnaPorCampo = new HashMap<>();
-            for (Cell celda : encabezado) {
-                String valor = obtenerValorCelda(celda, String.class);
-                if (valor == null) continue;
-                String valorNormalizado = normalizarTexto(valor);
-                for (Map.Entry<String, List<String>> entry : camposEsperados.entrySet()) {
-                    boolean match = entry.getValue().stream()
-                            .map(FybecaController::normalizarTexto)
-                            .anyMatch(v -> v.equals(valorNormalizado));
-                    if (match) {
-                        columnaPorCampo.put(entry.getKey(), celda.getColumnIndex());
-                        logger.info("✔ Columna '{}' mapeada a campo '{}'", valor, entry.getKey());
-                    }
-                }
+                return ResponseEntity.badRequest().body(Map.of(
+                        "ok", false,
+                        "message", "Cliente no existe: " + cod
+                ));
             }
 
-            for (String campo : camposEsperados.keySet()) {
-                if (!columnaPorCampo.containsKey(campo)) {
-                    logger.warn("❌ No se detectó ninguna columna para el campo obligatorio: {}", campo);
-                }
+            try (InputStream is = file.getInputStream()) {
+                Map<String, Object> resultado = fybecaService.cargarExcelFybeca(is, cod, file.getOriginalFilename());
+
+                @SuppressWarnings("unchecked")
+                List<String> cods = (List<String>) resultado.getOrDefault("codigosNoEncontrados", List.of());
+
+                resultado.put("tieneNoEncontrados", cods != null && !cods.isEmpty());
+
+                return ResponseEntity.ok(resultado);
             }
-
-            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
-
-                try {
-                    Venta venta = new Venta();
-                    venta.setDia(1);
-                    // Asigna SIEMPRE el cliente con ID real
-                    venta.setCliente(clienteCarga);
-
-                    if (columnaPorCampo.containsKey("anio"))
-                        venta.setAnio(obtenerValorCelda(row.getCell(columnaPorCampo.get("anio")), Integer.class));
-                    if (columnaPorCampo.containsKey("mes"))
-                        venta.setMes(obtenerValorCelda(row.getCell(columnaPorCampo.get("mes")), Integer.class));
-                    if (columnaPorCampo.containsKey("ventaDolares"))
-                        venta.setVentaDolares(obtenerValorCelda(row.getCell(columnaPorCampo.get("ventaDolares")), Double.class));
-                    if (columnaPorCampo.containsKey("ventaUnidad"))
-                        venta.setVentaUnidad(obtenerValorCelda(row.getCell(columnaPorCampo.get("ventaUnidad")), Double.class));
-                    if (columnaPorCampo.containsKey("codBarra"))
-                        venta.setCodBarra(obtenerValorCelda(row.getCell(columnaPorCampo.get("codBarra")), String.class));
-                    if (columnaPorCampo.containsKey("codPdv"))
-                        venta.setCodPdv(obtenerValorCelda(row.getCell(columnaPorCampo.get("codPdv")), String.class));
-                    if (columnaPorCampo.containsKey("pdv"))
-                        venta.setPdv(obtenerValorCelda(row.getCell(columnaPorCampo.get("pdv")), String.class));
-                    if (columnaPorCampo.containsKey("stockDolares"))
-                        venta.setStockDolares(obtenerValorCelda(row.getCell(columnaPorCampo.get("stockDolares")), Double.class));
-                    if (columnaPorCampo.containsKey("stockUnidades"))
-                        venta.setStockUnidades(obtenerValorCelda(row.getCell(columnaPorCampo.get("stockUnidades")), Double.class));
-                    if (columnaPorCampo.containsKey("marca"))
-                        venta.setMarca(obtenerValorCelda(row.getCell(columnaPorCampo.get("marca")), String.class));
-                    if (columnaPorCampo.containsKey("nombreProducto"))
-                        venta.setNombreProducto(obtenerValorCelda(row.getCell(columnaPorCampo.get("nombreProducto")), String.class));
-                    if (columnaPorCampo.containsKey("descripcion"))
-                        venta.setDescripcion(obtenerValorCelda(row.getCell(columnaPorCampo.get("descripcion")), String.class));
-                    if (venta.getCodBarra() == null || venta.getCodBarra().trim().isEmpty()) {
-                        logger.warn("⚠️ Fila {}: Código de barra vacío", i + 1);
-                        detalleNoEncontrados.add(Map.of(
-                                "codigo", "CODBARRA_VACIO",
-                                "motivo", "Fila " + (i + 1) + ": Código de barra vacío"
-                        ));
-                        continue;
-                    }
-
-                    boolean datosCargados = fybecaService.cargarDatosDeProducto(clienteCarga, venta, codigosNoEncontrados);
-                    if (!datosCargados) {
-                        logger.warn("⚠️ Fila {}: No se encontraron datos para el código {}", i + 1, venta.getCodBarra());
-                        detalleNoEncontrados.add(Map.of(
-                                "codigo", Objects.toString(venta.getCodBarra(), "N/D"),
-                                "motivo", "Fila " + (i + 1) + ": No se encontraron datos para el código " + Objects.toString(venta.getCodBarra(), "N/D")
-                        ));
-                        continue;
-                    }
-
-                    fybecaService.guardarOActualizarVenta(clienteCarga, venta);
-
-                } catch (Exception exFila) {
-                    logger.error("❌ Error procesando fila {}: {}", i + 1, exFila.getMessage(), exFila);
-                }
-            }
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("codigosNoEncontrados", detalleNoEncontrados);
-            body.put("filasLeidas", sheet.getLastRowNum());
-            body.put("filasProcesadas", sheet.getLastRowNum());
-            return ResponseEntity.ok(body);
-
-        } catch (IOException e) {
-            logger.error("❌ Error leyendo archivo Excel: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            logger.error("❌ Error inesperado al procesar archivo: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", e.getMessage()));
+            logger.error("Error subiendo archivo Fybeca: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "ok", false,
+                    "message", e.getMessage()
+            ));
         }
+    }
+
+    /**
+     * ✅ NUEVO:
+     * Endpoint para descargar TXT de no encontrados.
+     * El frontend le manda la lista y este endpoint devuelve el archivo .txt
+     */
+    @PostMapping("/codigos-no-encontrados/txt")
+    public ResponseEntity<Resource> descargarCodigosNoEncontradosTxt(@RequestBody List<String> codigosNoEncontrados) {
+        return fybecaService.obtenerArchivoCodigosNoEncontrados(codigosNoEncontrados);
     }
 
     // ---------- Catálogos auxiliares ----------
@@ -382,7 +233,7 @@ public class FybecaController {
 
     @PutMapping("/cliente/{id}")
     public ResponseEntity<Cliente> actualizarCliente(@PathVariable Long id, @RequestBody Cliente cliente) {
-        if (!clienteService.getClienteById(id).isPresent()) {
+        if (clienteService.getClienteById(id).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         cliente.setId(id);
@@ -391,7 +242,7 @@ public class FybecaController {
 
     @DeleteMapping("/cliente/{id}")
     public ResponseEntity<Void> eliminarCliente(@PathVariable Long id) {
-        if (!clienteService.getClienteById(id).isPresent()) {
+        if (clienteService.getClienteById(id).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
         clienteService.deleteCliente(id);
@@ -468,7 +319,6 @@ public class FybecaController {
         }
     }
 
-    // Mantiene método específico para FYBECA (default MZCL-000014)
     @PostMapping("/template-tipo-muebles")
     public ResponseEntity<List<TipoMueble>> subirTipoMuebles(@RequestParam("file") MultipartFile file) {
         List<TipoMueble> tipoMuebles = tipoMuebleService.cargarTipoMueblesDesdeArchivoFybeca(file);
@@ -486,7 +336,6 @@ public class FybecaController {
     }
 
     // ---------- Reportes ----------
-    /** Reporte de ventas: acepta ?codCliente=..., usa default si no se envía */
     @GetMapping("/reporte-ventas")
     public ResponseEntity<byte[]> generarReporteVentas(@RequestParam(required = false) String codCliente) {
         try {
@@ -517,38 +366,43 @@ public class FybecaController {
             int rowNum = 1;
             for (Venta venta : ventas) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(venta.getAnio());
-                row.createCell(1).setCellValue(venta.getMes());
-                row.createCell(2).setCellValue(venta.getMarca());
+
+                // Si anio/mes son Integer (wrapper) puedes usar esto:
+                row.createCell(0).setCellValue(venta.getAnio() != null ? venta.getAnio() : 0);
+                row.createCell(1).setCellValue(venta.getMes() != null ? venta.getMes() : 0);
+
+                row.createCell(2).setCellValue(venta.getMarca() != null ? venta.getMarca() : "");
 
                 if (venta.getCliente() != null) {
-                    row.createCell(3).setCellValue(venta.getCliente().getCodCliente());
-                    row.createCell(4).setCellValue(venta.getCliente().getNombreCliente());
-                    row.createCell(10).setCellValue(venta.getCliente().getCiudad());
+                    row.createCell(3).setCellValue(venta.getCliente().getCodCliente() != null ? venta.getCliente().getCodCliente() : "");
+                    row.createCell(4).setCellValue(venta.getCliente().getNombreCliente() != null ? venta.getCliente().getNombreCliente() : "");
+                    row.createCell(10).setCellValue(venta.getCliente().getCiudad() != null ? venta.getCliente().getCiudad() : "");
                 } else {
                     row.createCell(3).setCellValue("N/A");
                     row.createCell(4).setCellValue("N/A");
                     row.createCell(10).setCellValue("N/A");
                 }
 
-                row.createCell(5).setCellValue(venta.getCodBarra());
-                row.createCell(6).setCellValue(venta.getCodigoSap());
+                row.createCell(5).setCellValue(venta.getCodBarra() != null ? venta.getCodBarra() : "");
+                row.createCell(6).setCellValue(venta.getCodigoSap() != null ? venta.getCodigoSap() : "");
 
                 if (venta.getProducto() != null) {
-                    row.createCell(7).setCellValue(venta.getProducto().getCodItem());
-                    row.createCell(8).setCellValue(venta.getNombreProducto());
+                    row.createCell(7).setCellValue(venta.getProducto().getCodItem() != null ? venta.getProducto().getCodItem() : "");
+                    row.createCell(8).setCellValue(venta.getNombreProducto() != null ? venta.getNombreProducto() : "");
                 } else {
                     row.createCell(7).setCellValue("N/A");
                     row.createCell(8).setCellValue("N/A");
                 }
 
-                row.createCell(9).setCellValue(venta.getCodPdv());
-                row.createCell(11).setCellValue(venta.getPdv());
+                row.createCell(9).setCellValue(venta.getCodPdv() != null ? venta.getCodPdv() : "");
+                row.createCell(11).setCellValue(venta.getPdv() != null ? venta.getPdv() : "");
+
+                // Si estos getters devuelven double primitivo: perfecto así.
                 row.createCell(12).setCellValue(venta.getStockDolares());
                 row.createCell(13).setCellValue(venta.getStockUnidades());
                 row.createCell(14).setCellValue(venta.getVentaDolares());
                 row.createCell(15).setCellValue(venta.getVentaUnidad());
-            }
+            } // ✅ CIERRE DEL FOR (esto faltaba)
 
             byte[] byteArray = ExcelUtils.convertWorkbookToByteArray(workbook);
             workbook.close();
@@ -559,9 +413,25 @@ public class FybecaController {
                     .body(byteArray);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Error generando reporte ventas: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/reporte-ventas-zip")
+    public ResponseEntity<StreamingResponseBody> generarReporteVentasZip(
+            @RequestParam(value = "codCliente", required = false) String codCliente,
+            @RequestParam(value = "anio", required = false) Integer anio,
+            @RequestParam(value = "mes", required = false) Integer mes,
+            @RequestParam(value = "marca", required = false) String marca
+    ) {
+        String cod = resolveCodCliente(codCliente);
+        String filename = "fybeca_ventas_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
+        StreamingResponseBody body = outputStream -> fybecaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(body);
     }
 
     @GetMapping("/reporte-productos")
@@ -592,7 +462,7 @@ public class FybecaController {
                     .body(byteArray);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Error generando reporte productos: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
@@ -641,7 +511,7 @@ public class FybecaController {
                     .body(byteArray);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Error generando reporte tipo mueble: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

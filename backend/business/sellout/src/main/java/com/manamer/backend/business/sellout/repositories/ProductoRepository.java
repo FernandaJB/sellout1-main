@@ -45,9 +45,10 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
     
     Optional<Producto> findByCodBarraSap(String codBarraSap);
    
-    @Query("select p.id from Producto p where p.codBarraSap = :codBarraSap")
-        Optional<Long> findIdByCodBarraSap(@Param("codBarraSap") String codBarraSap);
-        
-    @Query("select p.codBarraSap as cod, p.id as id from Producto p where p.codBarraSap in :cods")
-        List<Object[]> findIdsByCodBarraSapIn(@Param("cods") Collection<String> cods);                               
+    @Query("SELECT p.codBarraSap, p.id FROM Producto p WHERE p.codBarraSap IN :cods")
+    List<Object[]> findIdsByCodBarraSapIn(@Param("cods") Collection<String> cods);
+
+    @Query("SELECT p.id FROM Producto p WHERE p.codBarraSap = :cb")
+    Optional<Long> findIdByCodBarraSap(@Param("cb") String cb);
+
 }

@@ -23,19 +23,20 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 // ================= API base y helper fetch =================
 const API_BASE = "/api-sellout/fybeca";
+const COD_CLIENTE_FIJO = "MZCL-000014"; // forzar siempre codCliente
+
+const MAX_DELETE = 2000;
 
 const getFilenameFromCD = (cd) => {
   if (!cd) return null;
-  const m = /filename\\*=UTF-8''([^;\\n]+)|filename=\\"?([^\\\";\\n]+)\\"?/i.exec(cd);
+  const m = /filename\*=UTF-8''([^;\n]+)|filename=\"?([^\";\n]+)\"?/i.exec(cd);
   if (m) return decodeURIComponent((m[1] || m[2] || "").trim());
   return null;
 };
 
-const COD_CLIENTE_FIJO = "MZCL-000014"; // filtrar/forzar siempre por este codCliente
-
 async function apiFetch(
   path,
-  { method = "GET", headers = {}, body, expect = "json", timeoutMs = 60000 } = {}
+  { method = "GET", headers = {}, body, expect = "json", timeoutMs = 300000 } = {}
 ) {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
@@ -62,11 +63,7 @@ async function apiFetch(
         ? `Error del servidor (${res.status})`
         : `Error HTTP (${res.status})`;
     const corr = res.headers.get("X-Error-Id") || res.headers.get("X-Correlation-Id");
-    throw new Error(
-      [base, msg && `Detalle: ${msg}`, corr && `Correlation-Id: ${corr}`]
-        .filter(Boolean)
-        .join(" | ")
-    );
+    throw new Error([base, msg && `Detalle: ${msg}`, corr && `Correlation-Id: ${corr}`].filter(Boolean).join(" | "));
   }
 
   if (expect === "blob") {
@@ -97,10 +94,14 @@ const monthNames = [
 ];
 const monthLabel = (m) => monthNames[(Number(m || 1) - 1)] || m;
 
+const num = (v, def = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : def;
+};
+
 // ================= Helpers de Incidencias / Log TXT =================
 const TXT_HEADER = "CODIGOS_NO_ENCONTRADOS";
 
-// Normaliza arrays de errores en distintas formas a: [{codigo, motivo}]
 const normalizeErrores = (result) => {
   const toObj = (x, motivoFallback = "Motivo no especificado") =>
     typeof x === "object"
@@ -110,29 +111,16 @@ const normalizeErrores = (result) => {
         })
       : ({ codigo: String(x), motivo: motivoFallback });
 
-  if (Array.isArray(result?.codigosNoEncontrados)) {
-    const arr = result.codigosNoEncontrados;
-    return arr.map((x) => toObj(x, "No se pudo mapear el código"));
-  }
-  if (Array.isArray(result?.errores)) {
-    return result.errores.map((x) => toObj(x, "Motivo no especificado"));
-  }
-  if (Array.isArray(result?.itemsFallidos)) {
-    return result.itemsFallidos.map((x) => toObj(x, "Motivo no especificado"));
-  }
-  if (Array.isArray(result)) {
-    return result.map((x) => toObj(x, "Motivo no especificado"));
-  }
+  if (Array.isArray(result?.codigosNoEncontrados)) return result.codigosNoEncontrados.map((x) => toObj(x, "No se pudo mapear el código"));
+  if (Array.isArray(result?.errores)) return result.errores.map((x) => toObj(x, "Motivo no especificado"));
+  if (Array.isArray(result?.itemsFallidos)) return result.itemsFallidos.map((x) => toObj(x, "Motivo no especificado"));
+  if (Array.isArray(result)) return result.map((x) => toObj(x, "Motivo no especificado"));
   if (Array.isArray(result?.lista)) {
-    return result.lista.map((c) => ({
-      codigo: String(c),
-      motivo: result?.motivo ?? "Motivo no especificado",
-    }));
+    return result.lista.map((c) => ({ codigo: String(c), motivo: result?.motivo ?? "Motivo no especificado" }));
   }
   return [];
 };
 
-// Extrae contadores de filas desde un JSON flexible
 const extractCounts = (result) => {
   const r = result || {};
   const possible = (obj, keys, def = 0) => {
@@ -146,37 +134,25 @@ const extractCounts = (result) => {
 
   const src = r.resumen ?? r.summary ?? r.stats ?? r;
 
-  const insertadas = possible(src, [
-    "filasInsertadas","insertadas","inserted","inserts","created"
-  ]);
-  const actualizadas = possible(src, [
-    "filasActualizadas","actualizadas","updated","updates","upserts"
-  ]);
-  const ignoradas = possible(src, [
-    "filasIgnoradas","ignoradas","skipped","omitidas"
-  ]);
-  const conError = possible(src, [
-    "filasConError","errores","withErrors","failed","fallidas"
-  ]);
+  const insertadas = possible(src, ["filasInsertadas","insertadas","inserted","inserts","created"]);
+  const actualizadas = possible(src, ["filasActualizadas","actualizadas","updated","updates","upserts"]);
+  const ignoradas = possible(src, ["filasIgnoradas","ignoradas","skipped","omitidas"]);
+  const conError = possible(src, ["filasConError","errores","withErrors","failed","fallidas"]);
   let total = possible(src, ["total","filas","totalFilas","rows","processed"]);
   if (!total) total = insertadas + actualizadas + ignoradas + conError;
 
-  // también soporta campos directos
   const filasLeidas = src?.filasLeidas ?? r?.filasLeidas ?? "N/D";
-
   return { insertadas, actualizadas, ignoradas, conError, total, filasLeidas };
 };
 
-// Construye el contenido del TXT de incidencias "simple"
 const buildTxtFromErrores = (errores) => {
   const lines = [TXT_HEADER];
   errores.forEach(({ codigo, motivo }) => {
     lines.push(`(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`);
   });
-  return lines.join("\\n");
+  return lines.join("\n");
 };
 
-// ===== Helpers para TXT de incidencias extendido =====
 const z2 = (n) => String(n).padStart(2, "0");
 const formatHHMMSS = (ms) => {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -185,11 +161,7 @@ const formatHHMMSS = (ms) => {
   const s = total % 60;
   return `${z2(h)}:${z2(m)}:${z2(s)}`;
 };
-const formatLocaleDateParts = (d) => {
-  const fecha = d.toLocaleDateString();
-  const hora = d.toLocaleTimeString();
-  return { fecha, hora };
-};
+
 const buildIncidenciasFybecaText = ({
   fileName,
   fileSizeBytes,
@@ -207,11 +179,9 @@ const buildIncidenciasFybecaText = ({
   errores = [],
 }) => {
   const sizeMB = (fileSizeBytes / (1024 * 1024));
-  const { fecha } = formatLocaleDateParts(startDate);
-  const { hora: horaInicio } = formatLocaleDateParts(startDate);
-  const { hora: horaFin } = formatLocaleDateParts(endDate);
-  const etaHHMMSS = formatHHMMSS(estMs);
-  const realHHMMSS = formatHHMMSS(elapsedMs);
+  const fecha = startDate.toLocaleDateString();
+  const horaInicio = startDate.toLocaleTimeString();
+  const horaFin = endDate.toLocaleTimeString();
 
   const header = [
     "==== INCIDENCIAS DE CARGA — VENTAS FYBECA ====",
@@ -220,8 +190,8 @@ const buildIncidenciasFybecaText = ({
     `Hora fin: ${horaFin}`,
     `Archivo: ${fileName || "N/D"}`,
     `Tamaño: ${sizeMB.toFixed(2)} MB (${fileSizeBytes} bytes)`,
-    `ETA (estimado): ${etaHHMMSS} (${Math.round(estMs)} ms)`,
-    `Tiempo real: ${realHHMMSS} (${Math.round(elapsedMs)} ms)`,
+    `ETA (estimado): ${formatHHMMSS(estMs)} (${Math.round(estMs)} ms)`,
+    `Tiempo real: ${formatHHMMSS(elapsedMs)} (${Math.round(elapsedMs)} ms)`,
     `Filas leídas: ${filasLeidas}`,
     `Filas procesadas: ${filasProcesadas}`,
     `Insertadas: ${insertadas}`,
@@ -232,18 +202,15 @@ const buildIncidenciasFybecaText = ({
     `Códigos no encontrados: ${errores.length}`,
     "",
     "---- DETALLE ERRORES / NO ENCONTRADOS ----",
-  ].join("\\n");
+  ].join("\n");
 
   const body = (errores && errores.length)
-    ? errores.map(({ codigo, motivo }) => `(el codigo : ${codigo}) - ${motivo || "No se pudo mapear el código"}`).join("\\n")
+    ? errores.map(({ codigo, motivo }) => `(el codigo : ${codigo}) - ${motivo || "No se pudo mapear el código"}`).join("\n")
     : "(sin incidencias)";
 
-  const footer = "\\n\\n==============================================\\n";
-
-  return header + "\\n" + body + footer;
+  return header + "\n" + body + "\n\n==============================================\n";
 };
 
-// Guardar contenido de texto
 const saveTextFile = async (contenido, suggestedName = "log.txt") => {
   try {
     if (!window.showSaveFilePicker) {
@@ -256,7 +223,6 @@ const saveTextFile = async (contenido, suggestedName = "log.txt") => {
       document.body.removeChild(link);
       return true;
     }
-
     const handle = await window.showSaveFilePicker({
       suggestedName,
       types: [{ description: "Archivo de texto", accept: { "text/plain": [".txt"] } }],
@@ -274,14 +240,15 @@ const saveTextFile = async (contenido, suggestedName = "log.txt") => {
 // ===== Tiempo de carga estilo Deprati =====
 const calculateUploadTime = (fileSize) => {
   const fileSizeMB = fileSize / (1024 * 1024);
-  const uploadSpeedMBps = 0.5; // estimación conservadora
-  const baseProcessingTime = 10000; // 10s
-  const processingTimePerMB = 1000; // 1s por MB
+  const uploadSpeedMBps = 0.5;
+  const baseProcessingTime = 10000;
+  const processingTimePerMB = 1000;
   const uploadTimeMs = (fileSizeMB / uploadSpeedMBps) * 1000;
   const processingTimeMs = baseProcessingTime + (fileSizeMB * processingTimePerMB);
-  const totalEstimatedTime = (uploadTimeMs + processingTimeMs) * 1.5; // 1.5x colchón
+  const totalEstimatedTime = (uploadTimeMs + processingTimeMs) * 1.5;
   return Math.min(Math.max(totalEstimatedTime, 15000), 900000);
 };
+
 const formatDuration = (ms) => {
   const totalSec = Math.max(0, Math.round(ms / 1000));
   const m = Math.floor(totalSec / 60);
@@ -290,7 +257,6 @@ const formatDuration = (ms) => {
   return m <= 0 ? `${ss}s` : `${m}:${ss} min`;
 };
 
-// === NUEVO: contar filas leídas en el Excel local antes de subir ===
 const countRowsInExcel = (file) =>
   new Promise((resolve) => {
     const reader = new FileReader();
@@ -302,7 +268,7 @@ const countRowsInExcel = (file) =>
         const ws = wb.Sheets[wsname];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
         const count = rows.filter((r) => Array.isArray(r) && r.some((c) => (c !== null && c !== undefined && String(c).trim() !== ""))).length;
-        resolve(Math.max(0, count - 1)); // restar cabecera
+        resolve(Math.max(0, count - 1));
       } catch {
         resolve("N/D");
       }
@@ -312,49 +278,56 @@ const countRowsInExcel = (file) =>
   });
 
 const Fybeca = () => {
-  // === Refs ===
   const toast = useRef(null);
   const fileInputRef = useRef(null);
   const abortRef = useRef(null);
 
-  // === State: data ===
-  const [ventas, setVentas] = useState([]);
-  const [ventasBase, setVentasBase] = useState([]);
-  const [loadingVentas, setLoadingVentas] = useState(false);
-  const [selectedVentas, setSelectedVentas] = useState([]);
-  const [editVenta, setEditVenta] = useState(null);
-  const [loadingTemplate, setLoadingTemplate] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [ultimoNoEncontrados, setUltimoNoEncontrados] = useState([]);
-
-  // Timers upload
-  const [uploadRemainingMs, setUploadRemainingMs] = useState(null);
-  const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
   const countdownRef = useRef(null);
   const elapsedRef = useRef(null);
 
-  // === State: filters (draft + applied) ===
+  // data
+  const [ventas, setVentas] = useState([]);
+  const [ventasBase, setVentasBase] = useState([]);
+  const [loadingVentas, setLoadingVentas] = useState(false);
+
+  // selection / edit
+  const [selectedVentas, setSelectedVentas] = useState([]);
+  const [editVenta, setEditVenta] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // overlay
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [uploadRemainingMs, setUploadRemainingMs] = useState(null);
+  const [uploadElapsedMs, setUploadElapsedMs] = useState(0);
+
+  // filtros draft + applied
   const [marcas, setMarcas] = useState([]);
   const [yearsOptions, setYearsOptions] = useState([]);
   const [monthsOptions, setMonthsOptions] = useState([]);
 
   const [filterYear, setFilterYear] = useState(null);
   const [filterMonth, setFilterMonth] = useState(null);
-  const [filterDay, setFilterDay] = useState(null);
   const [filterMarca, setFilterMarca] = useState("");
   const [filterDateRange, setFilterDateRange] = useState(null); // [from, to]
   const [globalFilter, setGlobalFilter] = useState("");
 
-  const [appliedFilters, setAppliedFilters] = useState({ year: null, month: null, day: null, marca: "", dateFrom: null, dateTo: null });
+  const [appliedFilters, setAppliedFilters] = useState({ year: null, month: null, marca: "", dateFrom: null, dateTo: null });
 
-  // Mostrar todo tras limpiar filtros
-  const [showAll, setShowAll] = useState(false);
+  // para mostrar todo al inicio
+  const [showAll, setShowAll] = useState(true);
 
-  // === Paginator ===
+  // paginator
   const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, page: 0, totalRecords: 0 });
   const [fullDataLoaded, setFullDataLoaded] = useState(false);
 
-  // === Toast helpers ===
+  // logs para toolbar (igual TemplateGeneral)
+  const [lastErrores, setLastErrores] = useState([]);
+  const [incidenciasTxt, setIncidenciasTxt] = useState(null);
+  const [incidenciasName, setIncidenciasName] = useState(null);
+  const [logDetalladoTxt, setLogDetalladoTxt] = useState(null);
+  const [logDetalladoName, setLogDetalladoName] = useState(null);
+
+  // ===== Toast helpers =====
   const showToast = ({ type = "info", summary, detail, life = 3500, content, sticky, className }) =>
     toast.current?.show({ severity: type, summary, detail, life, content, sticky, className });
   const showSuccess = (m) => showToast({ type: "success", summary: "Éxito", detail: m });
@@ -362,7 +335,7 @@ const Fybeca = () => {
   const showWarn = (m) => showToast({ type: "warn", summary: "Advertencia", detail: m });
   const showError = (m) => showToast({ type: "error", summary: "Error", detail: m, life: 8000 });
 
-  // === Loads base ===
+  // ===== loads =====
   const loadMarcas = async () => {
     try {
       const { data } = await apiFetch("/marcas-ventas");
@@ -383,10 +356,9 @@ const Fybeca = () => {
         .filter((o) => o.value !== null)
         .sort((a, b) => a.value - b.value);
       setYearsOptions(opts);
-    } catch (e) {
+    } catch {
       const years = [...new Set(ventasBase.map((v) => v.anio))].filter(Number.isFinite).sort((a, b) => a - b);
       setYearsOptions(years.map((y) => ({ label: String(y), value: y })));
-      showWarn("No se pudieron cargar los años desde API. Se usaron años del dataset.");
     }
   };
 
@@ -401,57 +373,17 @@ const Fybeca = () => {
       const { data } = await apiFetch(`/meses-disponibles?${qs.toString()}`);
       const raw = Array.isArray(data) ? data : [];
       const months = raw
-        .map((item) => {
-          const m = Number(
-            typeof item === "object" ? item?.mes ?? item?.month ?? item?.value : item
-          );
-          return Number.isFinite(m) ? m : null;
-        })
-        .filter((m) => m && m >= 1 && m <= 12)
-        .sort((a, b) => a - b);
-      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map(
-        (m) => ({ label: monthLabel(m), value: m })
-      );
-      setMonthsOptions(opts);
-    } catch (e) {
-      const months = [
-        ...new Set(ventasBase.filter((v) => v.anio === anio).map((v) => v.mes)),
-      ]
+        .map((item) => Number(typeof item === "object" ? item?.mes ?? item?.month ?? item?.value : item))
         .filter((m) => Number.isFinite(m) && m >= 1 && m <= 12)
         .sort((a, b) => a - b);
-      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map(
-        (m) => ({ label: monthLabel(m), value: m })
-      );
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => ({ label: monthLabel(m), value: m }));
       setMonthsOptions(opts);
-      showInfo(
-        months.length
-          ? `Se encontraron ${months.length} meses con datos para el año ${anio}.`
-          : `No hay datos para el año ${anio}. Se muestran todos los meses.`
-      );
-    }
-  };
-
-  const loadVentas = async () => {
-    setLoadingVentas(true);
-    try {
-      const limit = paginatorState?.rows || 50;
-      const offset = paginatorState?.first || 0;
-      const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(limit), offset: String(offset) });
-      const { data } = await apiFetch(`/venta?${qs.toString()}`);
-      const list = (Array.isArray(data) ? data : []).map((v) =>
-        v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
-      );
-      list._fromApi = true;
-      setVentas(list);
-      setVentasBase(list);
-      setPaginatorState((p) => ({ ...p, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: list.length }));
-    } catch (e) {
-      showError("Error al cargar ventas");
-      setVentas([]);
-      setVentasBase([]);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
-    } finally {
-      setLoadingVentas(false);
+    } catch {
+      const months = [...new Set(ventasBase.filter((v) => v.anio === anio).map((v) => v.mes))]
+        .filter((m) => Number.isFinite(m) && m >= 1 && m <= 12)
+        .sort((a, b) => a - b);
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => ({ label: monthLabel(m), value: m }));
+      setMonthsOptions(opts);
     }
   };
 
@@ -464,9 +396,7 @@ const Fybeca = () => {
       while (true) {
         const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(batch), offset: String(offset) });
         const { data } = await apiFetch(`/venta?${qs.toString()}`);
-        const chunk = (Array.isArray(data) ? data : []).map((v) =>
-          v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
-        );
+        const chunk = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
         all = all.concat(chunk);
         if (chunk.length < batch) break;
         offset += batch;
@@ -474,10 +404,10 @@ const Fybeca = () => {
       all._fromApi = true;
       setVentas(all);
       setVentasBase(all);
-      setPaginatorState((p) => ({ ...p, first: 0, rows: p.rows || 50, page: 0, totalRecords: all.length }));
+      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: all.length }));
       setShowAll(true);
       setFullDataLoaded(true);
-    } catch (e) {
+    } catch {
       showError("Error al cargar ventas");
       setVentas([]);
       setVentasBase([]);
@@ -487,28 +417,21 @@ const Fybeca = () => {
     }
   };
 
-  // ===== helper filtros =====
+  // ===== filtros helpers =====
   const hasAnyApplied = useMemo(
     () =>
       appliedFilters.year !== null ||
       appliedFilters.month !== null ||
-      appliedFilters.day !== null ||
       !!appliedFilters.marca ||
       !!appliedFilters.dateFrom ||
       !!appliedFilters.dateTo,
     [appliedFilters]
   );
 
-  const showAny = useMemo(
-    () => hasAnyApplied || (globalFilter?.trim()?.length > 0) || showAll,
-    [hasAnyApplied, globalFilter, showAll]
-  );
-
   const buildQuery = (f) => {
     const params = new URLSearchParams();
     if (f.year !== null) params.set("anio", String(f.year));
     if (f.month !== null) params.set("mes", String(f.month));
-    if (f.day !== null) params.set("dia", String(f.day));
     if (f.marca) params.set("marca", f.marca);
     if (f.dateFrom) {
       const d = new Date(f.dateFrom);
@@ -529,12 +452,12 @@ const Fybeca = () => {
   };
 
   const filterLocalData = (data, f) => {
-    return data.filter((item) => {
+    return (data || []).filter((item) => {
       if ((item?.cliente?.codCliente || "").trim() !== COD_CLIENTE_FIJO) return false;
       if (f.year !== null && Number(item.anio) !== Number(f.year)) return false;
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
-      if (f.day !== null && Number(item.dia) !== Number(f.day)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
+
       if (f.dateFrom || f.dateTo) {
         const itemDate = new Date(Number(item.anio), Number(item.mes) - 1, Number(item.dia || 1));
         if (f.dateFrom) {
@@ -553,25 +476,25 @@ const Fybeca = () => {
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const limit = paginatorState?.rows || 50;
-      const offset = paginatorState?.first || 0;
-      const qsBase = buildQuery(f);
-      const qs = qsBase ? new URLSearchParams(qsBase) : new URLSearchParams();
-      qs.set("limit", String(limit));
-      qs.set("offset", String(offset));
+      const qs = new URLSearchParams(buildQuery(f));
+      // si NO cargaste fullData, soporta paginación
+      if (!fullDataLoaded) {
+        qs.set("limit", String(paginatorState.rows || 50));
+        qs.set("offset", String(paginatorState.first || 0));
+      }
       const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: offset, rows: limit, page: Math.floor(offset / limit), totalRecords: list.length }));
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
-    } catch (e) {
-      const filteredData = filterLocalData(ventasBase, f);
-      filteredData._fromApi = true;
-      setVentas(filteredData);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filteredData.length }));
+    } catch {
+      const filtered = filterLocalData(ventasBase, f);
+      filtered._fromApi = true;
+      setVentas(filtered);
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
       showWarn("No se pudo conectar a la API. Aplicando filtros localmente...");
-      showInfo(`Se encontraron ${filteredData.length} registros (filtro local).`);
+      showInfo(`Se encontraron ${filtered.length} registros (filtro local).`);
     } finally {
       setLoadingVentas(false);
     }
@@ -581,17 +504,14 @@ const Fybeca = () => {
   useEffect(() => {
     loadMarcas();
     loadVentasAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
-  }, [appliedFilters, globalFilter]);
-
-  useEffect(() => {
     loadYearsOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventasBase]);
 
-  // Countdown update
   useEffect(() => {
     if (uploadRemainingMs == null) return;
     if (countdownRef.current) clearInterval(countdownRef.current);
@@ -599,98 +519,72 @@ const Fybeca = () => {
       setUploadRemainingMs((ms) => (ms == null ? null : Math.max(0, ms - 1000)));
     }, 1000);
     return () => {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
-      }
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      countdownRef.current = null;
     };
   }, [uploadRemainingMs]);
 
-  // Elapsed update
   useEffect(() => {
     if (!loadingTemplate) return;
     if (elapsedRef.current) clearInterval(elapsedRef.current);
-    elapsedRef.current = setInterval(() => {
-      setUploadElapsedMs((ms) => ms + 1000);
-    }, 1000);
+    elapsedRef.current = setInterval(() => setUploadElapsedMs((ms) => ms + 1000), 1000);
     return () => {
-      if (elapsedRef.current) {
-        clearInterval(elapsedRef.current);
-        elapsedRef.current = null;
-      }
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
     };
   }, [loadingTemplate]);
 
+  // ===== paginación =====
   const onPageChange = async (e) => {
-    setPaginatorState(e);
-    if (fullDataLoaded) return;
-    const limit = e?.rows || paginatorState?.rows || 50;
-    const offset = e?.first || paginatorState?.first || 0;
-    const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(limit), offset: String(offset) });
-    if (hasAnyApplied) {
-      await fetchVentasWithFilters(appliedFilters);
-    } else {
-      setLoadingVentas(true);
-      try {
-        const { data } = await apiFetch(`/venta?${qs.toString()}`);
-        const list = (Array.isArray(data) ? data : []).map((v) =>
-          v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
-        );
-        list._fromApi = true;
-        setVentas(list);
-      } catch {
-        showError("Error al cambiar de página");
-      } finally {
-        setLoadingVentas(false);
-      }
-    }
+    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }));
+    if (fullDataLoaded) return; // ya está todo cargado
+
+    // si no está full cargado, podrías implementar paginado real acá.
+    // Por simplicidad, con loadVentasAll ya lo tienes.
   };
 
   // ===== Filtros + búsqueda global =====
   const filteredData = useMemo(() => {
-    if (!showAny) return [];
+    if (!showAll && !hasAnyApplied && !(globalFilter?.trim())) return [];
 
     let base = [...ventas];
-    if (!showAll && hasAnyApplied && !base._fromApi) {
-      base = filterLocalData(base, appliedFilters);
-    }
+    if (!showAll && hasAnyApplied && !base._fromApi) base = filterLocalData(base, appliedFilters);
+
     if (globalFilter?.trim()) {
       const lowered = globalFilter.toLowerCase();
       base = base.filter((item) =>
         Object.values(item).some((val) =>
           typeof val === "object" && val !== null
-            ? Object.values(val).some((v2) => v2?.toString().toLowerCase().includes(lowered))
-            : val?.toString().toLowerCase().includes(lowered)
+            ? Object.values(val).some((v2) => String(v2 ?? "").toLowerCase().includes(lowered))
+            : String(val ?? "").toLowerCase().includes(lowered)
         )
       );
     }
     return base;
-  }, [ventas, hasAnyApplied, appliedFilters, globalFilter, showAny, showAll]);
+  }, [ventas, showAll, hasAnyApplied, appliedFilters, globalFilter, ventasBase]);
 
-  // ===== Guardar incidencias extendidas =====
-  const promptSaveIncidencias = async (metrics, errores, exitos) => {
-    const txt = buildIncidenciasFybecaText({
-      fileName: metrics.fileName,
-      fileSizeBytes: metrics.fileSizeBytes,
-      estMs: metrics.etaMsUsed,
-      elapsedMs: metrics.elapsedMsReal,
-      startDate: new Date(metrics.startedAt),
-      endDate: new Date(metrics.finishedAt),
-      filasLeidas: metrics.filasLeidas,
-      filasProcesadas: metrics.filasProcesadas,
-      insertadas: metrics.insertadas,
-      actualizadas: metrics.actualizadas,
-      ignoradas: metrics.ignoradas,
-      conError: metrics.conError,
-      codigosExitosos: exitos,
-      errores,
-    });
-    const fechaStr = new Date(metrics.finishedAt).toISOString().replace(/[:T]/g, "-").split(".")[0];
-    await saveTextFile(txt, `incidencias_fybeca_${fechaStr}.txt`);
-    showSuccess("Incidencias guardadas");
+  // ===== Guardado toolbar =====
+  const handleSaveIncidencias = async () => {
+    if (!incidenciasTxt) return showWarn("No hay incidencias generadas todavía.");
+    const ok = await saveTextFile(incidenciasTxt, incidenciasName || "incidencias_fybeca.txt");
+    if (ok) showSuccess("Incidencias guardadas.");
   };
 
-  // ===== Upload (estimación + toast persistente + overlay visible) =====
+  const handleSaveLogDetallado = async () => {
+    if (!logDetalladoTxt) return showWarn("No hay log detallado generado todavía.");
+    const ok = await saveTextFile(logDetalladoTxt, logDetalladoName || "log_detallado_fybeca.txt");
+    if (ok) showSuccess("Log detallado guardado.");
+  };
+
+  const handleSaveNoEncontrados = async () => {
+    if (!lastErrores?.length) return showWarn("No hay códigos no encontrados.");
+    const contenido = buildTxtFromErrores(lastErrores);
+    const fechaStr = new Date().toISOString().replace(/[:T]/g, "-").split(".")[0];
+    const ok = await saveTextFile(contenido, `codigos_no_encontrados_${fechaStr}.txt`);
+    if (ok) showSuccess("Archivo guardado correctamente");
+  };
+
+  // ===== Upload =====
   const cargarTemplate = async (file) => {
     if (!file) return showWarn("No seleccionaste ningún archivo.");
     const ext = file.name.split(".").pop().toLowerCase();
@@ -698,34 +592,30 @@ const Fybeca = () => {
 
     setLoadingTemplate(true);
     setUploadElapsedMs(0);
+    setUploadRemainingMs(calculateUploadTime(file.size));
 
-    let erroresNormalizados = [];
-    let downloadedExcel = false;
-    let counts = { insertadas:0, actualizadas:0, ignoradas:0, conError:0, total:0, filasLeidas: "N/D" };
+    // limpiar logs previos
+    setLastErrores([]);
+    setIncidenciasTxt(null);
+    setIncidenciasName(null);
+    setLogDetalladoTxt(null);
+    setLogDetalladoName(null);
 
-    // NUEVO: contar filas leídas localmente antes de subir
+    let counts = { insertadas:0, actualizadas:0, ignoradas:0, conError:0, total:0, filasLeidas:"N/D" };
     counts.filasLeidas = await countRowsInExcel(file);
 
-    // Estimar y arrancar countdown en vivo
-    const estMs = calculateUploadTime(file.size);
-    setUploadRemainingMs(estMs);
-    const estMin = Math.floor(estMs / 60000);
-    const estSec = Math.floor((estMs % 60000) / 1000);
-    const timeMessage = estMin > 0
-      ? `aproximadamente ${estMin} minutos y ${estSec} segundos`
-      : `aproximadamente ${estSec} segundos`;
-
     toast.current?.show({
-      severity: 'info',
-      summary: 'Cargando archivo',
-      detail: `Subiendo ${file.name}. Tiempo estimado: ${timeMessage}. Por favor espere...`,
+      severity: "info",
+      summary: "Cargando archivo",
+      detail: `Subiendo ${file.name}. ETA: ${formatDuration(uploadRemainingMs)}. Por favor espere...`,
       life: 0,
       sticky: true,
-      className: 'deprati-toast deprati-toast-info deprati-toast-persistent'
+      className: "deprati-toast deprati-toast-info deprati-toast-persistent",
     });
 
-    const start = performance.now();
-    const realStart = new Date();
+    const startPerf = performance.now();
+    const startReal = new Date();
+
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -739,9 +629,9 @@ const Fybeca = () => {
         signal: controller.signal,
       });
 
-      const end = performance.now();
-      const elapsedMs = Math.max(0, Math.round(end - start));
-      const realEnd = new Date();
+      const endPerf = performance.now();
+      const elapsedMs = Math.max(0, Math.round(endPerf - startPerf));
+      const endReal = new Date();
 
       if (!res.ok) {
         let msg = "";
@@ -756,6 +646,9 @@ const Fybeca = () => {
       const cd = res.headers.get("Content-Disposition");
       const suggestedFilename = getFilenameFromCD(cd) || "reporte_procesamiento.xlsx";
 
+      let erroresNormalizados = [];
+
+      // Caso 1: backend devuelve Excel
       if (contentType.includes("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -764,44 +657,40 @@ const Fybeca = () => {
         a.download = suggestedFilename;
         a.click();
         URL.revokeObjectURL(url);
-        downloadedExcel = true;
         if (toast.current) toast.current.clear();
-        showSuccess("Archivo procesado correctamente");
-      } else if (contentType.includes("application/json")) {
+        showSuccess("Archivo procesado correctamente (reporte descargado).");
+      }
+      // Caso 2: backend devuelve JSON
+      else if (contentType.includes("application/json")) {
         const result = await res.json();
         erroresNormalizados = normalizeErrores(result);
-        setUltimoNoEncontrados(erroresNormalizados);
+        setLastErrores(erroresNormalizados);
+
         const cnt = extractCounts(result);
         counts = { ...counts, ...cnt };
+
         if (toast.current) toast.current.clear();
         showSuccess("Archivo procesado correctamente");
 
         if (erroresNormalizados.length > 0) {
-          toast.current?.show({
-            severity: "warn",
+          showToast({
+            type: "warn",
             summary: "Códigos no encontrados",
+            sticky: true,
+            className: "deprati-toast deprati-toast-warning",
             content: (
-              <div className="flex flex-column gap-3">
+              <div className="flex flex-column gap-2">
                 <span>
                   Se detectaron <b>{erroresNormalizados.length}</b> códigos no encontrados.
                 </span>
                 <Button
-                  label="Guardar TXT (No encontrados)"
+                  label="Guardar sólo NO ENCONTRADOS"
                   icon="pi pi-save"
                   className="p-button-sm p-button-warning"
-                  style={{ whiteSpace: "nowrap", padding: "0.5rem 2.5rem" }}
-                  onClick={async () => {
-                    const contenido = buildTxtFromErrores(erroresNormalizados);
-                    const now = new Date();
-                    const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
-                    await saveTextFile(contenido, `codigos_no_encontrados_${fechaStr}.txt`);
-                    showSuccess("Archivo guardado correctamente");
-                  }}
+                  onClick={handleSaveNoEncontrados}
                 />
               </div>
             ),
-            sticky: true,
-            className: "deprati-toast deprati-toast-warning",
           });
         }
       } else {
@@ -809,114 +698,108 @@ const Fybeca = () => {
         showInfo(text?.substring(0, 200) || "Procesado.");
       }
 
-      // Recargar datos con filtros (o todo si showAll)
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+      // recargar tabla
+      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
 
-      // ==== Toast final con métricas + botones de guardado ====
+      // construir incidencias + log detallado para toolbar (igual TemplateGeneral)
       const procesadas = counts.total || (typeof counts.filasLeidas === "number" ? counts.filasLeidas : 0);
       const exitosos = Math.max(0, procesadas - (counts.conError || 0));
-      const metrics = {
+
+      const estMs = uploadRemainingMs ?? calculateUploadTime(file.size);
+
+      const incTxt = buildIncidenciasFybecaText({
         fileName: file.name,
         fileSizeBytes: file.size,
-        etaMsUsed: estMs,
-        elapsedMsReal: elapsedMs,
-        startedAt: realStart.toISOString(),
-        finishedAt: realEnd.toISOString(),
+        estMs,
+        elapsedMs,
+        startDate: startReal,
+        endDate: endReal,
         filasLeidas: counts.filasLeidas,
         filasProcesadas: procesadas,
         insertadas: counts.insertadas,
         actualizadas: counts.actualizadas,
         ignoradas: counts.ignoradas,
         conError: counts.conError,
-        cantErrores: counts.conError,
-        cantExitos: exitosos,
-        cantNoEncontrados: erroresNormalizados.length,
-      };
+        codigosExitosos: exitosos,
+        errores: erroresNormalizados,
+      });
 
-      toast.current?.show({
-        severity: metrics.cantNoEncontrados > 0 ? "warn" : "info",
+      const fechaStr = endReal.toISOString().replace(/[:T]/g, "-").split(".")[0];
+      setIncidenciasTxt(incTxt);
+      setIncidenciasName(`incidencias_fybeca_${fechaStr}.txt`);
+
+      const logDet = [
+        "LOG_DETALLADO_CARGA_FYBECA",
+        `ARCHIVO: ${file.name}`,
+        `TAMANO_BYTES: ${file.size}`,
+        `ETA_MS: ${Math.round(estMs)}`,
+        `TIEMPO_REAL_MS: ${Math.round(elapsedMs)}`,
+        "",
+        "RESUMEN:",
+        `  LEIDAS: ${counts.filasLeidas}`,
+        `  PROCESADAS: ${procesadas}`,
+        `  INSERTADAS: ${counts.insertadas}`,
+        `  ACTUALIZADAS: ${counts.actualizadas}`,
+        `  IGNORADAS: ${counts.ignoradas}`,
+        `  CON_ERROR: ${counts.conError}`,
+        `  EXITOS: ${exitosos}`,
+        `  NO_ENCONTRADOS: ${erroresNormalizados.length}`,
+      ].join("\n");
+
+      setLogDetalladoTxt(logDet);
+      setLogDetalladoName(`log_detallado_fybeca_${fechaStr}.txt`);
+
+      // Toast final (resumen)
+      showToast({
+        type: erroresNormalizados.length > 0 ? "warn" : "info",
+        summary: "Carga finalizada",
         sticky: true,
         className: "deprati-toast deprati-toast-info",
         content: (
           <div className="flex flex-column gap-2">
-            <div className="font-bold">{metrics.cantNoEncontrados > 0 ? "Códigos no encontrados detectados" : "Carga finalizada"}</div>
             <div>
-              Tiempo real: <b>{(metrics.elapsedMsReal/1000).toFixed(1)}s</b> — ETA: <b>{(metrics.etaMsUsed/1000).toFixed(1)}s</b><br/>
-              Leídas: <b>{metrics.filasLeidas ?? "N/D"}</b> | Procesadas: <b>{metrics.filasProcesadas ?? "N/D"}</b><br/>
-              Insertadas: <b>{metrics.insertadas}</b> | Actualizadas: <b>{metrics.actualizadas}</b> | Ignoradas: <b>{metrics.ignoradas}</b> | Con error: <b>{metrics.conError}</b><br/>
-              Éxitos: <b>{metrics.cantExitos}</b> | Errores: <b>{metrics.cantErrores}</b> | No encontrados: <b>{metrics.cantNoEncontrados}</b>
+              Tiempo real: <b>{(elapsedMs / 1000).toFixed(1)}s</b> — ETA: <b>{(estMs / 1000).toFixed(1)}s</b>
+              <br />
+              Leídas: <b>{counts.filasLeidas ?? "N/D"}</b> | Procesadas: <b>{procesadas ?? "N/D"}</b>
+              <br />
+              Insertadas: <b>{counts.insertadas}</b> | Actualizadas: <b>{counts.actualizadas}</b> | Ignoradas: <b>{counts.ignoradas}</b> | Con error: <b>{counts.conError}</b>
+              <br />
+              Éxitos: <b>{exitosos}</b> | No encontrados: <b>{erroresNormalizados.length}</b>
             </div>
-            <div className="flex gap-2">
-              <Button
-                label="Guardar TXT de incidencias"
-                icon="pi pi-save"
-                className="p-button-sm p-button-warning"
-                onClick={() => promptSaveIncidencias(metrics, erroresNormalizados, exitosos)}
-              />
-              {metrics.cantNoEncontrados > 0 && (
-                <Button
-                  label="Guardar sólo NO ENCONTRADOS"
-                  icon="pi pi-file"
-                  className="p-button-sm p-button-help"
-                  onClick={() => {
-                    const header = "CODIGOS_NO_ENCONTRADOS";
-                    const body = erroresNormalizados.map(({codigo, motivo}) => `(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`).join("\\n");
-                    const contenido = [header, body].join("\\n");
-                    const fechaStr = new Date(metrics.finishedAt).toISOString().replace(/[:T]/g, "-").split(".")[0];
-                    saveTextFile(contenido, `codigos_no_encontrados_${fechaStr}.txt`);
-                  }}
-                />
-              )}
+            <div className="flex gap-2 flex-wrap">
+              <Button label="Guardar Incidencias" icon="pi pi-save" className="p-button-sm p-button-warning" onClick={handleSaveIncidencias} disabled={!incTxt}/>
+              <Button label="Guardar Log detallado" icon="pi pi-save" className="p-button-sm p-button-secondary" onClick={handleSaveLogDetallado} disabled={!logDet}/>
             </div>
           </div>
-        )
+        ),
       });
 
     } catch (e) {
       if (toast.current) toast.current.clear();
-      const msg = String(e?.message || e || 'Error inesperado');
-      if (e?.name === 'AbortError') {
-        showError('Tiempo de carga excedido. Puede que el servidor aún esté procesando.');
-      } else if (msg.includes('Failed to fetch')) {
-        showError('No se pudo conectar con el servidor. Verifica la conexión.');
-      } else {
-        showError(msg);
-      }
+      const msg = String(e?.message || e || "Error inesperado");
+      if (e?.name === "AbortError") showError("Carga cancelada o tiempo excedido.");
+      else if (msg.includes("Failed to fetch")) showError("No se pudo conectar con el servidor. Verifica la conexión.");
+      else showError(msg);
     } finally {
       setUploadRemainingMs(null);
-      setTimeout(() => {
-        setLoadingTemplate(false);
-      }, 1500);
+      setTimeout(() => setLoadingTemplate(false), 900);
       abortRef.current = null;
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
-      }
-      if (elapsedRef.current) {
-        clearInterval(elapsedRef.current);
-        elapsedRef.current = null;
-      }
+
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
     }
   };
 
   // ===== CRUD =====
   const actualizarVenta = async (venta) => {
-    try {
-      const payload = {
-        ...venta,
-        cliente: { ...(venta?.cliente || {}), codCliente: COD_CLIENTE_FIJO },
-      };
-      await apiFetch(`/venta/${venta.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      showSuccess("Venta actualizada correctamente");
-      setEditVenta(null);
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
-    } catch (e) {
-      showError(String(e));
-    }
+    const payload = { ...venta, cliente: { ...(venta?.cliente || {}), codCliente: COD_CLIENTE_FIJO } };
+    await apiFetch(`/venta/${venta.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   };
 
   const eliminarVenta = (id) => {
@@ -932,7 +815,7 @@ const Fybeca = () => {
         try {
           await apiFetch(`/venta/${id}`, { method: "DELETE" });
           showSuccess("Venta eliminada correctamente");
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
         } catch (e) {
           showError(String(e));
         }
@@ -941,10 +824,9 @@ const Fybeca = () => {
   };
 
   const eliminarVentasSeleccionadas = () => {
-    if (selectedVentas.length === 0) {
-      showInfo("No hay ventas seleccionadas para eliminar");
-      return;
-    }
+    if (!selectedVentas.length) return showInfo("No hay ventas seleccionadas para eliminar");
+    if (selectedVentas.length > MAX_DELETE) return showWarn(`Selecciona máximo ${MAX_DELETE.toLocaleString()} para eliminar.`);
+
     confirmDialog({
       message: `¿Está seguro de eliminar ${selectedVentas.length} venta(s)?`,
       header: "Confirmación de eliminación",
@@ -955,7 +837,7 @@ const Fybeca = () => {
       closable: false,
       accept: async () => {
         try {
-          const ids = selectedVentas.map((v) => v.id).slice(0, 5000); // límite de 5000
+          const ids = selectedVentas.map((v) => v.id).slice(0, MAX_DELETE);
           await apiFetch(`/ventas-forma-masiva`, {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -963,23 +845,27 @@ const Fybeca = () => {
           });
           showSuccess("Ventas eliminadas correctamente");
           setSelectedVentas([]);
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
-        } catch (e) {
+          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+        } catch {
           showError("Error al eliminar las ventas");
         }
       },
     });
   };
 
-  // ===== Reportes =====
   const downloadVentasReport = async () => {
     try {
-      const { blob, filename } = await apiFetch(`/reporte-ventas`, { expect: "blob" });
+      const qs = new URLSearchParams();
+      qs.append("codCliente", COD_CLIENTE_FIJO);
+      if (Number.isFinite(appliedFilters.year)) qs.append("anio", appliedFilters.year);
+      if (Number.isFinite(appliedFilters.month)) qs.append("mes", appliedFilters.month);
+      if (appliedFilters.marca) qs.append("marca", appliedFilters.marca);
+      const { blob, filename } = await apiFetch(`/reporte-ventas-zip?${qs.toString()}`, { expect: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = filename || "reporte_ventas_fybeca.xlsx";
+      link.download = filename || "fybeca_ventas.zip";
       link.click();
-      showInfo("Reporte general descargándose en segundo plano.");
+      showInfo("Reporte ZIP descargándose en segundo plano.");
     } catch (e) {
       showError(String(e));
     }
@@ -987,10 +873,8 @@ const Fybeca = () => {
 
   const downloadFilteredVentasReport = () => {
     const dataToUse = filteredData;
-    if (!dataToUse.length) {
-      showWarn("No hay datos filtrados para generar el reporte.");
-      return;
-    }
+    if (!dataToUse.length) return showWarn("No hay datos filtrados para generar el reporte.");
+
     const exportData = dataToUse.map((v) => ({
       "Año": v.anio,
       "Mes": monthLabel(v.mes),
@@ -1011,26 +895,9 @@ const Fybeca = () => {
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
-    const header = Object.keys(exportData[0] || {});
-    const headerRow = 1;
-    const colIndexByHeader = {};
-    header.forEach((h, idx) => (colIndexByHeader[h] = idx));
-    const fmtCols = ["Stock ($)", "Stock (U)", "Venta ($)", "Venta (U)"];
-    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-    for (let r = headerRow + 1; r <= range.e.r; r++) {
-      fmtCols.forEach((h) => {
-        const c = colIndexByHeader[h];
-        if (c == null) return;
-        const addr = XLSX.utils.encode_cell({ r, c });
-        const cell = ws[addr];
-        if (cell) {
-          cell.t = "n";
-          cell.z = "#,##0.00";
-        }
-      });
-    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Ventas Filtradas");
+
     const today = new Date();
     const dateStr = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
     let fileName = "Reporte_Ventas_Fybeca_";
@@ -1038,11 +905,12 @@ const Fybeca = () => {
     if (Number.isFinite(appliedFilters.month)) fileName += `${monthLabel(appliedFilters.month)}_`;
     if (appliedFilters.marca) fileName += `${appliedFilters.marca}_`;
     fileName += dateStr + ".xlsx";
+
     XLSX.writeFile(wb, fileName);
     showSuccess(`Se ha generado el reporte con ${exportData.length} registros.`);
   };
 
-  // ===== Eventos de UI =====
+  // ===== UI filtros =====
   const handleApplyFilters = async () => {
     if (filterMonth !== null && filterMonth !== "" && (filterYear === null || filterYear === "")) {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");
@@ -1052,7 +920,8 @@ const Fybeca = () => {
     const month = filterMonth != null && filterMonth !== "" ? Number(filterMonth) : null;
     const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
     const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
-    const newApplied = { year, month, day: filterDay, marca: filterMarca, dateFrom, dateTo };
+
+    const newApplied = { year, month, marca: filterMarca, dateFrom, dateTo };
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     setShowAll(false);
@@ -1063,21 +932,20 @@ const Fybeca = () => {
     setFilterYear(null);
     setFilterMonth(null);
     setFilterMarca("");
-    setFilterDay(null);
     setFilterDateRange(null);
     setGlobalFilter("");
     setMonthsOptions([]);
-    setAppliedFilters({ year: null, month: null, day: null, marca: "", dateFrom: null, dateTo: null });
+    setAppliedFilters({ year: null, month: null, marca: "", dateFrom: null, dateTo: null });
     setShowAll(true);
-    await loadVentas();
+    await loadVentasAll();
     showInfo("Filtros limpiados correctamente.");
   };
 
   const onSelectionChange = (e) => {
     const value = e.value || [];
-    if (value.length > 5000) {
-      showWarn("Solo puede seleccionar un máximo de 5000 registros para eliminar.");
-      setSelectedVentas(value.slice(0, 5000));
+    if (value.length > MAX_DELETE) {
+      showWarn(`Solo puede seleccionar un máximo de ${MAX_DELETE.toLocaleString()} registros.`);
+      setSelectedVentas(value.slice(0, MAX_DELETE));
     } else {
       setSelectedVentas(value);
     }
@@ -1089,6 +957,11 @@ const Fybeca = () => {
     setIsSaving(true);
     try {
       await actualizarVenta(editVenta);
+      showSuccess("Venta actualizada correctamente");
+      setEditVenta(null);
+      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+    } catch (err) {
+      showError(String(err));
     } finally {
       setIsSaving(false);
     }
@@ -1096,7 +969,12 @@ const Fybeca = () => {
 
   const renderHeader = () => (
     <div className="deprati-table-header flex flex-wrap gap-2 align-items-center justify-content-between">
-      <h4 className="deprati-title m-0">Gestión de Ventas Fybeca</h4>
+      <h4 className="deprati-title m-0">
+        Gestión de Ventas Fybeca
+        <small style={{ marginLeft: 8, fontWeight: 400, opacity: 0.8 }}>
+          (máx. {MAX_DELETE.toLocaleString()} por eliminación)
+        </small>
+      </h4>
       <span className="deprati-search p-input-icon-left">
         <i className="pi pi-search" />
         <InputText
@@ -1113,11 +991,23 @@ const Fybeca = () => {
   );
 
   const leftToolbarTemplate = () => (
-    <div className="deprati-toolbar-left flex flex-wrap align-items-center gap-3">
+    <div className="flex flex-wrap gap-2">
+      <Button
+        label={`Eliminar Seleccionados (${selectedVentas.length})`}
+        icon="pi pi-trash"
+        className="p-button-danger"
+        onClick={eliminarVentasSeleccionadas}
+        disabled={selectedVentas.length === 0 || selectedVentas.length > MAX_DELETE}
+      />
+    </div>
+  );
+
+  const rightToolbarTemplate = () => (
+    <div className="flex flex-wrap gap-2">
       <Button
         label="Importar Excel"
-        icon="pi pi-file-excel"
-        className="p-button-primary p-button-raised"
+        icon="pi pi-upload"
+        className="p-button-help"
         onClick={() => fileInputRef.current?.click()}
       />
       <input
@@ -1131,22 +1021,11 @@ const Fybeca = () => {
           e.target.value = "";
         }}
       />
-      <Button
-        label="Eliminar Seleccionados"
-        icon="pi pi-trash"
-        className="p-button-danger"
-        disabled={!selectedVentas.length}
-        onClick={eliminarVentasSeleccionadas}
-      />
-    </div>
-  );
 
-  const rightToolbarTemplate = () => (
-    <div className="deprati-toolbar-right flex flex-wrap align-items-center gap-3">
       <Button
         label="Descargar Template"
         icon="pi pi-download"
-        className="p-button-raised p-button-warning"
+        className="p-button-info"
         onClick={() => {
           const url = encodeURI("/TEMPLATE VENTAS FYBECA.xlsx");
           const link = document.createElement("a");
@@ -1155,32 +1034,49 @@ const Fybeca = () => {
           link.click();
         }}
       />
+
       <Button
-        label="Reporte Ventas"
-        icon="pi pi-file-excel"
-        className="p-button-success p-button-raised"
+        label="Reporte Ventas (ZIP)"
+        icon="pi pi-file"
+        className="p-button-success"
         onClick={downloadVentasReport}
         disabled={loadingVentas}
       />
+
       <Button
         label="Exportar Filtrados"
         icon="pi pi-file-excel"
-        className="p-button-success p-button-raised"
+        className="p-button-success"
         onClick={downloadFilteredVentasReport}
         disabled={!filteredData.length}
       />
+
       <Button
-        label="Guardar TXT (No encontrados)"
+        label="Guardar Incidencias"
         icon="pi pi-save"
-        className="p-button-raised p-button-help"
-        disabled={!ultimoNoEncontrados || ultimoNoEncontrados.length === 0}
-        onClick={async () => {
-          const contenido = buildTxtFromErrores(ultimoNoEncontrados);
-          const now = new Date();
-          const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
-          await saveTextFile(contenido, `codigos_no_encontrados_${fechaStr}.txt`);
-          showSuccess("Archivo guardado correctamente");
-        }}
+        className="p-button-warning"
+        onClick={handleSaveIncidencias}
+        disabled={!incidenciasTxt}
+        tooltip={incidenciasName || "incidencias_fybeca.txt"}
+        tooltipOptions={{ position: "bottom" }}
+      />
+
+      <Button
+        label="Guardar Log detallado"
+        icon="pi pi-save"
+        className="p-button-secondary"
+        onClick={handleSaveLogDetallado}
+        disabled={!logDetalladoTxt}
+        tooltip={logDetalladoName || "log_detallado_fybeca.txt"}
+        tooltipOptions={{ position: "bottom" }}
+      />
+
+      <Button
+        label="Guardar No Encontrados"
+        icon="pi pi-save"
+        className="p-button-help"
+        onClick={handleSaveNoEncontrados}
+        disabled={!lastErrores?.length}
       />
     </div>
   );
@@ -1211,23 +1107,34 @@ const Fybeca = () => {
       <Toast ref={toast} position="top-right" className="toast-on-top" />
       <ConfirmDialog />
 
-      {/* Overlay de carga con texto blanco y negrita */}
+      {/* Overlay de carga */}
       {loadingTemplate && (
         <div className="fixed top-0 left-0 w-full h-full flex justify-content-center align-items-center bg-black-alpha-70 z-5">
-          <div className="surface-card p-5 border-round shadow-2 text-center" style={{ minWidth: 360, backgroundColor: 'rgba(0,0,0,0.85)' }}>
-            <ProgressSpinner style={{ width: '60px', height: '60px' }} />
-            <div className="mt-3" style={{ fontWeight: 'bold', color: 'white', fontSize: '1.2rem' }}>Procesando archivo...</div>
-            <div className="mt-2" style={{ fontSize: '1rem', color: 'white', fontWeight: 'bold' }}>
-              {uploadRemainingMs != null
-                ? <>Tiempo restante estimado:&nbsp;<span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: 'white' }}>{formatDuration(uploadRemainingMs)}</span></>
-                : <span style={{ color: 'white', fontWeight: 'bold' }}>Calculando tiempo estimado...</span>}
+          <div className="surface-card p-5 border-round shadow-2 text-center" style={{ minWidth: 360, backgroundColor: "rgba(0,0,0,0.85)" }}>
+            <ProgressSpinner style={{ width: "60px", height: "60px" }} />
+            <div className="mt-3" style={{ fontWeight: "bold", color: "white", fontSize: "1.2rem" }}>
+              Procesando archivo...
             </div>
-            <div className="mt-2" style={{ fontSize: '1rem', color: 'white', fontWeight: 'bold' }}>
+            <div className="mt-2" style={{ fontSize: "1rem", color: "white", fontWeight: "bold" }}>
+              {uploadRemainingMs != null ? (
+                <>
+                  Tiempo restante estimado:&nbsp;
+                  <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "white" }}>
+                    {formatDuration(uploadRemainingMs)}
+                  </span>
+                </>
+              ) : (
+                <span style={{ color: "white", fontWeight: "bold" }}>Calculando tiempo estimado...</span>
+              )}
+            </div>
+            <div className="mt-2" style={{ fontSize: "1rem", color: "white", fontWeight: "bold" }}>
               Tiempo transcurrido:&nbsp;
-              <span style={{ fontFamily: 'monospace', fontWeight: 'bold', color: 'white' }}>{formatDuration(uploadElapsedMs)}</span>
+              <span style={{ fontFamily: "monospace", fontWeight: "bold", color: "white" }}>
+                {formatDuration(uploadElapsedMs)}
+              </span>
             </div>
             {uploadRemainingMs === 0 && (
-              <div className="mt-2" style={{ fontSize: '0.9rem', color: '#f8f9fa' }}>
+              <div className="mt-2" style={{ fontSize: "0.9rem", color: "#f8f9fa" }}>
                 Casi listo… finalizando procesamiento del servidor
               </div>
             )}
@@ -1249,19 +1156,18 @@ const Fybeca = () => {
 
       <div className="deprati-card card">
         <h1 className="deprati-main-title text-center text-primary my-4">Ventas Fybeca</h1>
+
         <Toolbar className="deprati-toolbar mb-4" left={leftToolbarTemplate} right={rightToolbarTemplate} />
 
         {/* Filtros */}
         <Card className="deprati-filter-card mb-4">
           <h3 className="deprati-section-title text-primary mb-3">Filtros de Búsqueda</h3>
+
           <div className="grid formgrid">
             <div className="flex flex-wrap gap-8 align-items-end">
               <div className="field">
-                <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">
-                  Año
-                </label>
+                <label className="deprati-label font-bold block mb-2">Año</label>
                 <Dropdown
-                  id="filterYear"
                   value={filterYear}
                   options={yearsOptions}
                   onChange={async (e) => {
@@ -1272,80 +1178,73 @@ const Fybeca = () => {
                   }}
                   placeholder="Seleccionar Año"
                   className="deprati-dropdown w-12rem"
+                  showClear
                 />
               </div>
 
               <div className="field">
-                <label htmlFor="filterMonth" className="deprati-label font-bold block mb-2">
-                  Mes
-                </label>
+                <label className="deprati-label font-bold block mb-2">Mes</label>
                 <Dropdown
-                  id="filterMonth"
                   value={filterMonth}
                   options={monthsOptions}
                   onChange={(e) => setFilterMonth(e.value != null ? Number(e.value) : null)}
                   placeholder={filterYear == null ? "Seleccione primero un Año" : "Seleccionar Mes"}
                   className="deprati-dropdown w-12rem"
                   disabled={filterYear == null || monthsOptions.length === 0}
+                  showClear
                 />
               </div>
 
-          <div className="field">
-            <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
-              Marca
-            </label>
-            <Dropdown
-              id="filterMarca"
-              value={filterMarca}
-              options={marcas.map((m) => ({ label: m, value: m }))}
-              onChange={(e) => setFilterMarca(e.value)}
-              placeholder="Seleccionar Marca"
-              className="deprati-dropdown w-12rem"
-            />
-          </div>
+              <div className="field">
+                <label className="deprati-label font-bold block mb-2">Marca</label>
+                <Dropdown
+                  value={filterMarca}
+                  options={marcas.map((m) => ({ label: m, value: m }))}
+                  onChange={(e) => setFilterMarca(e.value || "")}
+                  placeholder="Seleccionar Marca"
+                  className="deprati-dropdown w-16rem"
+                  showClear
+                  filter
+                />
+              </div>
 
-          {/* Eliminado filtro Día numérico, usar solo Rango de Fecha */}
-
-          <div className="field">
-            <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">
-              Rango de Fecha
-            </label>
-            <Calendar
-              id="filterDateRange"
-              value={filterDateRange}
-              onChange={(e) => setFilterDateRange(e.value || null)}
-              dateFormat="dd/mm/yy"
-              selectionMode="range"
-              readOnlyInput
-              placeholder="Seleccione rango de fechas"
-              className="deprati-calendar w-16rem"
-              showIcon
-              inputClassName="text-black font-bold"
-            />
-          </div>
+              <div className="field">
+                <label className="deprati-label font-bold block mb-2">Rango de Fecha</label>
+                <Calendar
+                  value={filterDateRange}
+                  onChange={(e) => setFilterDateRange(e.value || null)}
+                  dateFormat="dd/mm/yy"
+                  selectionMode="range"
+                  readOnlyInput
+                  placeholder="Seleccione rango de fechas"
+                  className="deprati-calendar w-16rem"
+                  showIcon
+                  inputClassName="text-black font-bold"
+                />
+              </div>
             </div>
-  </div>
+          </div>
 
-  <Divider className="deprati-divider" />
-  <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
-    <Button
-      label="Aplicar Filtro"
-      icon="pi pi-filter"
-      onClick={handleApplyFilters}
-      className="p-button-primary p-button-raised deprati-button deprati-button-apply"
-    />
-    <Button
-      label="Limpiar Filtros"
-      icon="pi pi-times"
-      onClick={handleClearFilters}
-      className="p-button-raised p-button-outlined deprati-button deprati-button-clear"
-    />
-  </div>
-</Card>
+          <Divider className="deprati-divider" />
+          <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
+            <Button
+              label="Aplicar Filtro"
+              icon="pi pi-filter"
+              onClick={handleApplyFilters}
+              className="p-button-primary p-button-raised deprati-button deprati-button-apply"
+            />
+            <Button
+              label="Limpiar Filtros"
+              icon="pi pi-times"
+              onClick={handleClearFilters}
+              className="p-button-raised p-button-outlined deprati-button deprati-button-clear"
+            />
+          </div>
+        </Card>
 
-{/* Tabla */}
-<div className="card">
-  <DataTable
+        {/* Tabla */}
+        <div className="card">
+          <DataTable
             value={filteredData}
             paginator
             rows={paginatorState.rows}
@@ -1357,7 +1256,6 @@ const Fybeca = () => {
             paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
             currentPageReportTemplate="Mostrando {first} a {last} de {totalRecords} registros"
             dataKey="id"
-            selectionMode={'checkbox'}
             selection={selectedVentas}
             onSelectionChange={onSelectionChange}
             selectionPageOnly={false}
@@ -1369,55 +1267,51 @@ const Fybeca = () => {
             emptyMessage="No se encontraron registros"
             loading={loadingVentas}
             className="p-datatable-sm"
-            tableStyle={{ minWidth: '50rem' }}
+            tableStyle={{ minWidth: "50rem" }}
             resizableColumns
             columnResizeMode="fit"
           >
-            <Column selectionMode="multiple" headerStyle={{ width: '3rem' }} headerCheckbox />
-            <Column field="anio" header="Año" sortable style={{ width: '8%' }} />
-            <Column field="mes" header="Mes" sortable style={{ width: '8%' }} />
-            <Column field="dia" header="Día" sortable style={{ width: '8%' }} />
-            <Column field="marca" header="Marca" sortable style={{ width: '10%' }} />
-            <Column field="codPdv" header="Código PDV" sortable style={{ width: '10%' }} />
-            <Column field="pdv" header="PDV" sortable style={{ width: '12%' }} />
-            <Column field="ciudad" header="Ciudad" sortable style={{ width: '10%' }} />
-            <Column field="nombreProducto" header="Producto" sortable style={{ width: '15%' }} />
-            <Column field="codBarra" header="Código Barra" sortable style={{ width: '10%' }} />
+            <Column selectionMode="multiple" headerStyle={{ width: "3rem" }} headerCheckbox />
+            <Column field="anio" header="Año" sortable />
+            <Column field="mes" header="Mes" sortable body={(r) => monthLabel(r.mes)} />
+            <Column field="dia" header="Día" sortable />
+            <Column field="marca" header="Marca" sortable />
+            <Column field="codPdv" header="Código PDV" sortable />
+            <Column field="pdv" header="PDV" sortable />
+            <Column field="ciudad" header="Ciudad" sortable />
+            <Column field="nombreProducto" header="Producto" sortable style={{ minWidth: "18rem" }} />
+            <Column field="codBarra" header="Código Barra" sortable />
             <Column
               field="stockDolares"
               header="Stock ($)"
               sortable
-              body={(r) => r?.stockDolares !== undefined ? Number(r.stockDolares).toFixed(2) : "0.00"}
-              style={{ width: '10%' }}
+              body={(r) => num(r?.stockDolares, 0).toFixed(2)}
             />
             <Column
               field="stockUnidades"
               header="Stock (U)"
               sortable
-              body={(r) => r?.stockUnidades !== undefined ? Number(r.stockUnidades).toFixed(0) : "0"}
-              style={{ width: '10%' }}
+              body={(r) => num(r?.stockUnidades, 0).toFixed(0)}
             />
             <Column
               field="ventaDolares"
               header="Venta ($)"
               sortable
-              body={(r) => r?.ventaDolares !== undefined ? Number(r.ventaDolares).toFixed(2) : "0.00"}
-              style={{ width: '10%' }}
+              body={(r) => num(r?.ventaDolares, 0).toFixed(2)}
             />
             <Column
               field="ventaUnidad"
               header="Venta (U)"
               sortable
-              body={(r) => r?.ventaUnidad !== undefined ? Number(r.ventaUnidad).toFixed(0) : "0"}
-              style={{ width: '10%' }}
+              body={(r) => num(r?.ventaUnidad, 0).toFixed(0)}
             />
-            <Column body={actionBodyTemplate} exportable={false} style={{ width: '8%' }} header="Acciones" />
+            <Column body={actionBodyTemplate} exportable={false} header="Acciones" />
           </DataTable>
         </div>
 
-        {/* Diálogo de edición */}
+        {/* Diálogo de edición (igual estilo TemplateGeneral) */}
         <Dialog
-          key={editVenta?.id || 'new'}
+          key={editVenta?.id || "new"}
           visible={editVenta !== null}
           onHide={() => setEditVenta(null)}
           header={
@@ -1432,63 +1326,57 @@ const Fybeca = () => {
             </div>
           }
           className="deprati-edit-dialog p-fluid surface-overlay shadow-3"
-          style={{ width: '70vw', maxWidth: '1200px' }}
+          style={{ width: "70vw", maxWidth: "1200px" }}
           modal
           closable={false}
           dismissableMask
-          breakpoints={{ '960px': '85vw', '641px': '95vw' }}
+          breakpoints={{ "960px": "85vw", "641px": "95vw" }}
         >
-          <form onSubmit={handleFormSubmit} className="deprati-form p-4" style={{ fontSize: '1.05rem' }}>
+          <form onSubmit={handleFormSubmit} className="deprati-form p-4" style={{ fontSize: "1.05rem" }}>
             <div className="p-4 mb-5 border-1 border-round surface-card shadow-2">
               <div className="text-lg font-semibold text-primary mb-3">Información General</div>
               <div className="grid formgrid p-fluid gap-4">
-                {[
-                  { id: 'anio', label: 'Año', value: editVenta?.anio },
-                  { id: 'mes', label: 'Mes', value: editVenta?.mes },
-                  { id: 'dia', label: 'Día', value: editVenta?.dia }
-                ].map((f) => (
-                  <div key={f.id} className="col-12 md:col-3">
+                {["anio","mes","dia"].map((id) => (
+                  <div key={id} className="col-12 md:col-3">
                     <span className="p-float-label w-full">
                       <InputNumber
-                        id={f.id}
-                        value={f.value}
-                        onValueChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.value })}
+                        id={id}
+                        value={editVenta?.[id]}
+                        onValueChange={(e) => setEditVenta({ ...editVenta, [id]: e.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                         useGrouping={false}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={id} style={{ fontSize: "1rem" }}>{id.toUpperCase()}</label>
                     </span>
                   </div>
                 ))}
+
                 <div className="col-12 md:col-3">
                   <span className="p-float-label w-full">
                     <InputText
                       id="marca"
                       value={editVenta?.marca || ""}
-                      className={`w-full ${!editVenta?.marca ? 'p-invalid' : ''}`}
+                      className={`w-full ${!editVenta?.marca ? "p-invalid" : ""}`}
                       onChange={(e) => setEditVenta({ ...editVenta, marca: e.target.value })}
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="marca" style={{ fontSize: '1rem' }}>Marca</label>
+                    <label htmlFor="marca" style={{ fontSize: "1rem" }}>Marca</label>
                   </span>
                   {!editVenta?.marca && <small className="p-error">La marca es requerida</small>}
                 </div>
-                {[
-                  { id: 'codPdv', label: 'Código PDV' },
-                  { id: 'pdv', label: 'PDV' },
-                  { id: 'ciudad', label: 'Ciudad' }
-                ].map((f) => (
-                  <div key={f.id} className="col-12 md:col-4">
+
+                {["codPdv","pdv","ciudad"].map((id) => (
+                  <div key={id} className="col-12 md:col-4">
                     <span className="p-float-label w-full">
                       <InputText
-                        id={f.id}
-                        value={editVenta?.[f.id] || ""}
-                        onChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.target.value })}
+                        id={id}
+                        value={editVenta?.[id] || ""}
+                        onChange={(e) => setEditVenta({ ...editVenta, [id]: e.target.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={id} style={{ fontSize: "1rem" }}>{id.toUpperCase()}</label>
                     </span>
                   </div>
                 ))}
@@ -1505,9 +1393,9 @@ const Fybeca = () => {
                       value={editVenta?.nombreProducto || ""}
                       onChange={(e) => setEditVenta({ ...editVenta, nombreProducto: e.target.value })}
                       className="w-full"
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="nombreProducto" style={{ fontSize: '1rem' }}>Producto</label>
+                    <label htmlFor="nombreProducto" style={{ fontSize: "1rem" }}>Producto</label>
                   </span>
                 </div>
                 <div className="col-12 md:col-6">
@@ -1517,9 +1405,9 @@ const Fybeca = () => {
                       value={editVenta?.codBarra || ""}
                       onChange={(e) => setEditVenta({ ...editVenta, codBarra: e.target.value })}
                       className="w-full"
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="codBarra" style={{ fontSize: '1rem' }}>Código de Barra</label>
+                    <label htmlFor="codBarra" style={{ fontSize: "1rem" }}>Código de Barra</label>
                   </span>
                 </div>
               </div>
@@ -1529,10 +1417,10 @@ const Fybeca = () => {
               <div className="text-lg font-semibold text-primary mb-3">Información de Stock y Ventas</div>
               <div className="grid formgrid p-fluid gap-3">
                 {[
-                  { id: 'stockDolares', label: 'Stock ($)', mode: 'decimal' },
-                  { id: 'stockUnidades', label: 'Stock (U)' },
-                  { id: 'ventaDolares', label: 'Venta ($)', mode: 'decimal' },
-                  { id: 'ventaUnidad', label: 'Venta (U)' }
+                  { id: "stockDolares", label: "Stock ($)", mode: "decimal" },
+                  { id: "stockUnidades", label: "Stock (U)" },
+                  { id: "ventaDolares", label: "Venta ($)", mode: "decimal" },
+                  { id: "ventaUnidad", label: "Venta (U)" },
                 ].map((f) => (
                   <div key={f.id} className="col-12 md:col-4">
                     <span className="p-float-label w-full">
@@ -1541,11 +1429,11 @@ const Fybeca = () => {
                         value={editVenta?.[f.id]}
                         onValueChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                         mode={f.mode}
-                        minFractionDigits={f.mode === 'decimal' ? 2 : undefined}
+                        minFractionDigits={f.mode === "decimal" ? 2 : undefined}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={f.id} style={{ fontSize: "1rem" }}>{f.label}</label>
                     </span>
                   </div>
                 ))}
@@ -1559,7 +1447,7 @@ const Fybeca = () => {
                 onClick={() => setEditVenta(null)}
                 className="p-button-outlined p-button-secondary"
                 type="button"
-                style={{ fontSize: '1.05rem', padding: '0.75rem 1.5rem' }}
+                style={{ fontSize: "1.05rem", padding: "0.75rem 1.5rem" }}
               />
               <Button
                 label={isSaving ? "Guardando..." : "Guardar"}
@@ -1568,7 +1456,7 @@ const Fybeca = () => {
                 type="submit"
                 autoFocus
                 className="p-button-primary"
-                style={{ fontSize: '1.05rem', padding: '0.75rem 1.5rem' }}
+                style={{ fontSize: "1.05rem", padding: "0.75rem 1.5rem" }}
               />
             </div>
           </form>

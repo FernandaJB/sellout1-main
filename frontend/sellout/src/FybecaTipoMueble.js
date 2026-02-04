@@ -1,10 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import "./css/deprati.css";
 import "./css/fybeca.css";
-import "@fortawesome/fontawesome-free/css/all.min.css";
+
+import "primereact/resources/themes/lara-light-indigo/theme.css";
+import "primereact/resources/primereact.min.css";
+import "primeicons/primeicons.css";
+import "primeflex/primeflex.css";
+
 import { Toast } from "primereact/toast";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { ProgressSpinner } from "primereact/progressspinner";
-import { Paginator } from "primereact/paginator";
+import { Toolbar } from "primereact/toolbar";
+import { Card } from "primereact/card";
+import { Divider } from "primereact/divider";
+import { DataTable } from "primereact/datatable";
+import { Column } from "primereact/column";
+import { Button } from "primereact/button";
+import { InputText } from "primereact/inputtext";
+import { Dropdown } from "primereact/dropdown";
+import { Dialog } from "primereact/dialog";
 
 // ===================== Helpers de borrado (compatibles con API masiva/no-estándar) =====================
 export async function parseDeleteResponse(resp) {
@@ -48,22 +62,28 @@ export async function parseDeleteResponse(resp) {
   };
 }
 
-export function showDeletionOutcome({ eliminados, bloqueados, bloqueadosInfo, message }, showSuccess, showWarn, showInfo) {
-  if (eliminados?.length) {
-    showSuccess(`Eliminados: ${eliminados.length}`);
-  }
+export function showDeletionOutcome(
+  { eliminados, bloqueados, bloqueadosInfo, message },
+  showSuccess,
+  showWarn,
+  showInfo
+) {
+  if (eliminados?.length) showSuccess(`Eliminados: ${eliminados.length}`);
+
   if (bloqueados?.length) {
-    const detalle = (bloqueadosInfo && bloqueadosInfo.length)
-      ? bloqueadosInfo.map((p) => `ID ${p.id} (PDV: ${p?.codPdv ?? "-"})`).join("; ")
-      : `IDs: ${bloqueados.join(", ")}`;
+    const detalle =
+      bloqueadosInfo && bloqueadosInfo.length
+        ? bloqueadosInfo.map((p) => `ID ${p.id} (PDV: ${p?.codPdv ?? "-"})`).join("; ")
+        : `IDs: ${bloqueados.join(", ")}`;
+
     const motivo = /ventas asociadas/i.test(message)
       ? "Tiene ventas asociadas"
       : "Restricción de integridad referencial";
+
     showWarn(`No se pudieron eliminar ${bloqueados.length} registro(s). Motivo: ${motivo}. ${detalle}`);
   }
-  if (!eliminados?.length && !bloqueados?.length) {
-    showInfo(message || "Operación completada");
-  }
+
+  if (!eliminados?.length && !bloqueados?.length) showInfo(message || "Operación completada");
 }
 // ======================================================================================
 
@@ -71,44 +91,46 @@ const COD_CLIENTE_FIJO = "MZCL-000014"; // Siempre filtrar por este codCliente
 
 const FybecaTipoMueble = () => {
   const toast = useRef(null);
+  const fileInputRef = useRef(null);
 
   const [tipoMuebles, setTipoMuebles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingUpload, setLoadingUpload] = useState(false);
-
   const [error, setError] = useState("");
 
-  // ====== filtros ======
-  const [filter, setFilter] = useState("");
+  // ✅ filtros que SÍ quieres
+  const [filterMarca, setFilterMarca] = useState(""); // búsqueda general por marca
   const [filterTipoMuebleEssence, setFilterTipoMuebleEssence] = useState("");
   const [filterTipoMuebleCatrice, setFilterTipoMuebleCatrice] = useState("");
-  const [filterYear, setFilterYear] = useState(null);
-  const [filterMonth, setFilterMonth] = useState(null);
-  const [filterDay, setFilterDay] = useState(null);
-  const [filterMarca, setFilterMarca] = useState("");
-  const [filterDateRange, setFilterDateRange] = useState(null);
 
-  // ====== selección múltiple (IDs) ======
-  const [selectedIds, setSelectedIds] = useState([]);
+  // selección (objetos para DataTable)
+  const [selectedRows, setSelectedRows] = useState([]);
 
-  const showToast = ({ type = "info", summary, detail, life = 3000 }) => {
-    toast.current?.show({ severity: type, summary, detail, life });
-  };
+  // edición
+  const [editTipoMueble, setEditTipoMueble] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // ===== Toast helpers =====
+  const showToast = ({ type = "info", summary, detail, life = 3500, content, sticky, className }) =>
+    toast.current?.show({ severity: type, summary, detail, life, content, sticky, className });
+
   const showSuccess = (m) => showToast({ type: "success", summary: "Éxito", detail: m });
   const showInfo = (m) => showToast({ type: "info", summary: "Información", detail: m });
   const showWarn = (m) => showToast({ type: "warn", summary: "Advertencia", detail: m });
-  const showError = (m) => showToast({ type: "error", summary: "Error", detail: m });
+  const showError = (m) => showToast({ type: "error", summary: "Error", detail: m, life: 9000 });
 
   // ====== carga inicial ======
   const loadTipoMuebles = async () => {
     setLoading(true);
     setError("");
     try {
-      const resp = await fetch(`/api-sellout/fybeca/tipo-mueble?codCliente=${encodeURIComponent(COD_CLIENTE_FIJO)}`);
-      if (!resp.ok) throw new Error(`Error al cargar tipos de mueble`);
+      const resp = await fetch(
+        `/api-sellout/fybeca/tipo-mueble?codCliente=${encodeURIComponent(COD_CLIENTE_FIJO)}`
+      );
+      if (!resp.ok) throw new Error("Error al cargar tipos de mueble");
       const data = await resp.json();
       setTipoMuebles(Array.isArray(data) ? data : []);
-      setSelectedIds([]);
+      setSelectedRows([]);
     } catch (e) {
       setError(e.message);
       showError(e.message);
@@ -119,88 +141,42 @@ const FybecaTipoMueble = () => {
 
   useEffect(() => {
     loadTipoMuebles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ====== opciones para selects (derivadas de data) ======
-  const essenceOptions = useMemo(
-    () => Array.from(new Set(tipoMuebles.map((tm) => tm?.tipoMuebleEssence).filter(Boolean))).sort(),
-    [tipoMuebles]
-  );
-  const catriceOptions = useMemo(
-    () => Array.from(new Set(tipoMuebles.map((tm) => tm?.tipoMuebleCatrice).filter(Boolean))).sort(),
-    [tipoMuebles]
-  );
+  // ====== opciones Essence/Catrice ======
+  const essenceOptions = useMemo(() => {
+    const arr = Array.from(new Set((tipoMuebles || []).map((tm) => tm?.tipoMuebleEssence).filter(Boolean))).sort();
+    return arr.map((x) => ({ label: x, value: x }));
+  }, [tipoMuebles]);
 
-  // ====== lista visible = filtros + cliente ======
+  const catriceOptions = useMemo(() => {
+    const arr = Array.from(new Set((tipoMuebles || []).map((tm) => tm?.tipoMuebleCatrice).filter(Boolean))).sort();
+    return arr.map((x) => ({ label: x, value: x }));
+  }, [tipoMuebles]);
+
+  const safeLower = (v) => String(v ?? "").toLowerCase();
+
+  // ====== lista visible con SOLO estos filtros ======
   const visibleTipoMuebles = useMemo(() => {
-    const q = (filter || "").toLowerCase().trim();
     return (tipoMuebles || []).filter((tm) => {
       const esCliente = (tm?.cliente?.codCliente || "").trim() === COD_CLIENTE_FIJO;
       if (!esCliente) return false;
-      if (filterYear != null && Number(tm.anio ?? tm.year) !== Number(filterYear)) return false;
-      if (filterMonth != null && Number(tm.mes ?? tm.month) !== Number(filterMonth)) return false;
-      if (filterDay != null && Number(tm.dia ?? tm.day) !== Number(filterDay)) return false;
-      if (filterMarca && (tm.marca ?? tm?.producto?.marca ?? "").toLowerCase() !== filterMarca.toLowerCase()) return false;
-      if (filterDateRange && Array.isArray(filterDateRange)) {
-        const [from, to] = filterDateRange;
-        if (from || to) {
-          const itemDate = new Date(Number(tm.anio ?? tm.year ?? 1970), Number((tm.mes ?? tm.month ?? 1)) - 1, Number(tm.dia ?? tm.day ?? 1));
-          if (from) {
-            const df = new Date(from);
-            const f = new Date(df.getFullYear(), df.getMonth(), df.getDate());
-            if (itemDate < f) return false;
-          }
-          if (to) {
-            const dt = new Date(to);
-            const t = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
-            if (itemDate > t) return false;
-          }
-        }
-      }
-      const matchTexto = !q || [
-        tm?.codPdv,
-        tm?.nombrePdv,
-        tm?.ciudad,
-        tm?.cliente?.codCliente,
-        tm?.cliente?.nombreCliente,
-        tm?.tipoMuebleEssence,
-        tm?.tipoMuebleCatrice,
-      ]
-        .map((v) => String(v ?? "").toLowerCase())
-        .some((v) => v.includes(q));
 
       const matchEssence = !filterTipoMuebleEssence || tm?.tipoMuebleEssence === filterTipoMuebleEssence;
       const matchCatrice = !filterTipoMuebleCatrice || tm?.tipoMuebleCatrice === filterTipoMuebleCatrice;
-      return matchTexto && matchEssence && matchCatrice;
+
+      // ✅ búsqueda general por marca (si tu entidad tiene "marca" o viene dentro de producto)
+      const marcaRow = tm?.marca ?? tm?.producto?.marca ?? "";
+      const matchMarca = !filterMarca || safeLower(marcaRow).includes(safeLower(filterMarca));
+
+      return matchEssence && matchCatrice && matchMarca;
     });
-  }, [tipoMuebles, filter, filterTipoMuebleEssence, filterTipoMuebleCatrice, filterYear, filterMonth, filterDay, filterMarca, filterDateRange]);
-
-  const [paginatorState, setPaginatorState] = useState({ first: 0, rows: 50, totalRecords: 0 });
-
-  useEffect(() => {
-    setPaginatorState((p) => ({ ...p, totalRecords: visibleTipoMuebles.length, first: 0 }));
-  }, [visibleTipoMuebles]);
-
-  // ====== selección estilo "seleccionar visibles" ======
-  const allVisibleIds = useMemo(() => visibleTipoMuebles.map((tm) => tm.id), [visibleTipoMuebles]);
-  const areAllVisibleSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIds.includes(id));
-
-  const handleSelect = (id) => {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-  const handleSelectAll = () => {
-    if (areAllVisibleSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !allVisibleIds.includes(id)));
-    } else {
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...allVisibleIds])));
-    }
-  };
+  }, [tipoMuebles, filterTipoMuebleEssence, filterTipoMuebleCatrice, filterMarca]);
 
   // ====== crear / actualizar ======
-  const [editTipoMueble, setEditTipoMueble] = useState(null);
-
   const crearTipoMueble = async (tm) => {
-    setLoading(true);
+    setIsSaving(true);
     try {
       tm.cliente = { ...(tm.cliente || {}), codCliente: COD_CLIENTE_FIJO };
       const resp = await fetch("/api-sellout/fybeca/tipo-mueble", {
@@ -208,7 +184,8 @@ const FybecaTipoMueble = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tm),
       });
-      if (!resp.ok) throw new Error(`Error al crear tipo de mueble`);
+      if (!resp.ok) throw new Error("Error al crear tipo de mueble");
+
       showSuccess("Tipo de mueble creado correctamente");
       setEditTipoMueble(null);
       await loadTipoMuebles();
@@ -216,12 +193,12 @@ const FybecaTipoMueble = () => {
       setError(e.message);
       showError(e.message);
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
   const actualizarTipoMueble = async (tm) => {
-    setLoading(true);
+    setIsSaving(true);
     try {
       tm.cliente = { ...(tm.cliente || {}), codCliente: COD_CLIENTE_FIJO };
       const resp = await fetch(`/api-sellout/fybeca/tipo-mueble/${tm.id}`, {
@@ -229,7 +206,8 @@ const FybecaTipoMueble = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(tm),
       });
-      if (!resp.ok) throw new Error(`Error al actualizar tipo de mueble`);
+      if (!resp.ok) throw new Error("Error al actualizar tipo de mueble");
+
       showSuccess("Tipo de mueble actualizado correctamente");
       setEditTipoMueble(null);
       await loadTipoMuebles();
@@ -237,7 +215,7 @@ const FybecaTipoMueble = () => {
       setError(e.message);
       showError(e.message);
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -250,6 +228,7 @@ const FybecaTipoMueble = () => {
       acceptLabel: "Sí, eliminar",
       rejectLabel: "Cancelar",
       acceptClassName: "p-button-danger",
+      closable: false,
       accept: async () => {
         setLoading(true);
         try {
@@ -259,9 +238,8 @@ const FybecaTipoMueble = () => {
             showDeletionOutcome(parsed, showSuccess, showWarn, showInfo);
             return;
           }
-          // eliminado OK
           setTipoMuebles((prev) => prev.filter((x) => x.id !== id));
-          setSelectedIds((prev) => prev.filter((x) => x !== id));
+          setSelectedRows((prev) => prev.filter((r) => r.id !== id));
           showSuccess("Tipo de mueble eliminado correctamente");
         } catch (e) {
           setError(e.message);
@@ -275,10 +253,10 @@ const FybecaTipoMueble = () => {
 
   // ====== eliminación masiva ======
   const eliminarTipoMueblesSeleccionados = () => {
-    if (!selectedIds.length) {
-      showInfo("No hay tipos de mueble seleccionados");
-      return;
-    }
+    if (!selectedRows.length) return showInfo("No hay tipos de mueble seleccionados");
+
+    const selectedIds = selectedRows.map((r) => r.id);
+
     confirmDialog({
       message: `¿Está seguro de eliminar ${selectedIds.length} tipo(s) de mueble?`,
       header: "Confirmación de eliminación",
@@ -286,6 +264,7 @@ const FybecaTipoMueble = () => {
       acceptLabel: "Sí, eliminar",
       rejectLabel: "Cancelar",
       acceptClassName: "p-button-danger",
+      closable: false,
       accept: async () => {
         setLoading(true);
         try {
@@ -297,23 +276,26 @@ const FybecaTipoMueble = () => {
 
           for (let i = 0; i < selectedIds.length; i += batchSize) {
             const batch = selectedIds.slice(i, i + batchSize);
+            // eslint-disable-next-line no-await-in-loop
             const resp = await fetch("/api-sellout/fybeca/eliminar-varios-tipo-mueble", {
               method: "DELETE",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(batch),
             });
 
+            // eslint-disable-next-line no-await-in-loop
             const parsed = await parseDeleteResponse(resp);
+
             eliminadosTotal = eliminadosTotal.concat(parsed.eliminados || []);
             bloqueadosTotal = bloqueadosTotal.concat(parsed.bloqueados || []);
             bloqueadosInfoTotal = bloqueadosInfoTotal.concat(parsed.bloqueadosInfo || []);
             if (parsed.message) messages.push(parsed.message);
           }
 
-          // actualizar UI
           const removeSet = new Set(eliminadosTotal);
+
           setTipoMuebles((prev) => prev.filter((x) => !removeSet.has(x.id)));
-          setSelectedIds((prev) => prev.filter((id) => !removeSet.has(id)));
+          setSelectedRows([]);
 
           showDeletionOutcome(
             {
@@ -337,24 +319,27 @@ const FybecaTipoMueble = () => {
   };
 
   // ====== subir XLSX ======
-  const fileInputRef = useRef(null);
   const subirArchivo = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     setLoadingUpload(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
+
       const resp = await fetch("/api-sellout/fybeca/template-tipo-muebles", { method: "POST", body: fd });
       if (!resp.ok) throw new Error("Error al subir archivo");
+
       const msg = await resp.text();
       showSuccess(msg || "Archivo subido correctamente");
       await loadTipoMuebles();
-    } catch (e) {
-      setError(e.message);
-      showError(e.message);
+    } catch (e2) {
+      setError(e2.message);
+      showError(e2.message);
     } finally {
       setLoadingUpload(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -363,8 +348,10 @@ const FybecaTipoMueble = () => {
     try {
       const resp = await fetch("/api-sellout/fybeca/reporte-tipo-mueble", { method: "GET" });
       if (!resp.ok) throw new Error("Error al descargar reporte");
+
       const cd = resp.headers.get("Content-Disposition");
       const filename = cd ? cd.split("filename=")[1]?.replace(/"/g, "") : "reporte_tipo_mueble.xlsx";
+
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -374,6 +361,7 @@ const FybecaTipoMueble = () => {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+
       showSuccess("Reporte generado correctamente");
     } catch (e) {
       setError(e.message);
@@ -381,288 +369,360 @@ const FybecaTipoMueble = () => {
     }
   };
 
-  // ====== UI ======
+  // ====== UI helpers ======
+  const renderHeader = () => (
+    <div className="deprati-table-header flex flex-wrap gap-2 align-items-center justify-content-between">
+      <h4 className="deprati-title m-0">Tipos de Display Fybeca</h4>
+      <span className="deprati-search p-input-icon-left">
+        <i className="pi pi-search" />
+        <InputText
+          value={filterMarca}
+          onChange={(e) => setFilterMarca(e.target.value || "")}
+          placeholder="Buscar por marca..."
+          className="deprati-search-input"
+        />
+      </span>
+    </div>
+  );
+
+  const leftToolbarTemplate = () => (
+    <div className="deprati-toolbar-left flex flex-wrap align-items-center gap-3">
+      <Button
+        label="Eliminar Seleccionados"
+        icon="pi pi-trash"
+        className="p-button-danger"
+        onClick={eliminarTipoMueblesSeleccionados}
+        disabled={!selectedRows.length}
+      />
+      <Button
+        label="Nuevo"
+        icon="pi pi-plus"
+        className="p-button-primary p-button-raised"
+        onClick={() =>
+          setEditTipoMueble({
+            cliente: { codCliente: COD_CLIENTE_FIJO, nombreCliente: "" },
+            ciudad: "",
+            codPdv: "",
+            nombrePdv: "",
+            tipoMuebleEssence: "",
+            tipoMuebleCatrice: "",
+          })
+        }
+      />
+    </div>
+  );
+
+  const rightToolbarTemplate = () => (
+    <div className="deprati-toolbar-right flex flex-wrap align-items-center gap-3">
+      <Button
+        label="Descargar Template"
+        icon="pi pi-download"
+        className="p-button-raised p-button-warning"
+        onClick={() => {
+          const url = encodeURI("/TEMPLATE DE TIPO DE MUEBLE.xlsx");
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "TEMPLATE DE TIPO DE MUEBLE.xlsx";
+          a.click();
+        }}
+      />
+      <Button
+        label="Importar XLSX"
+        icon="pi pi-upload"
+        className="p-button-help p-button-raised"
+        onClick={() => fileInputRef.current?.click()}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        style={{ display: "none" }}
+        onChange={subirArchivo}
+      />
+      <Button
+        label="Reporte"
+        icon="pi pi-file-excel"
+        className="p-button-success p-button-raised"
+        onClick={descargarReporte}
+      />
+    </div>
+  );
+
+  const actionTemplate = (row) => (
+    <div className="deprati-row-actions flex gap-2 justify-content-center">
+      <Button
+        icon="pi pi-pencil"
+        className="p-button-rounded p-button-outlined p-button-info"
+        onClick={() => setEditTipoMueble({ ...row })}
+        tooltip="Editar"
+        aria-label="Editar"
+      />
+      <Button
+        icon="pi pi-trash"
+        className="p-button-rounded p-button-outlined p-button-danger"
+        onClick={() => eliminarTipoMueble(row.id)}
+        tooltip="Eliminar"
+        aria-label="Eliminar"
+      />
+    </div>
+  );
+
   return (
-    <div className="container">
-      <h1>Tipos de Mueble Fybeca</h1>
-      <Toast ref={toast} />
+    <div className="deprati-layout-wrapper">
+      <Toast ref={toast} position="top-right" className="toast-on-top" />
       <ConfirmDialog />
 
-      {/* overlay de subida */}
+      {/* Overlay upload */}
       {loadingUpload && (
-        <div className="overlay">
-          <div className="spinner-container">
-            <ProgressSpinner style={{ width: "70px", height: "70px" }} strokeWidth="8" animationDuration="0.7s" />
-            <p>Subiendo archivo...</p>
-          </div>
-        </div>
-      )}
-
-      {/* Gestión de archivos y reportes */}
-      <div className="card-section">
-        <h3>Gestión de Archivos y Reportes</h3>
-        <div className="button-grid">
-          <div className="button-item">
-            <button onClick={descargarReporte} className="btn-general">
-              <i className="fas fa-file-excel" /> Descargar Reporte
-            </button>
-          </div>
-          <div className="button-item">
-            <a href="/TEMPLATE DE TIPO DE MUEBLE.xlsx" download className="btn-general">
-              <i className="fas fa-download" /> <span>Descargar Template</span>
-              <div className="btn-hover-effect" />
-            </a>
-          </div>
-          <div className="button-item">
-            <label className="file-upload" onClick={() => fileInputRef.current?.click()}>
-              <i className="fas fa-file-upload" /> Elegir Archivo
-            </label>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={subirArchivo} style={{ display: "none" }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="card-section">
-        <h3>Filtros de Búsqueda</h3>
-        <div className="filter-container">
-          <div className="filter-group">
-            <label htmlFor="filter">Búsqueda General:</label>
-            <div className="search-input">
-              <i className="fas fa-search search-icon" />
-              <input id="filter" type="text" placeholder="Buscar en todos los campos" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="fixed top-0 left-0 w-full h-full flex justify-content-center align-items-center bg-black-alpha-70 z-5">
+          <div className="surface-card p-5 border-round shadow-2 text-center" style={{ minWidth: 360, backgroundColor: "rgba(0,0,0,0.85)" }}>
+            <ProgressSpinner style={{ width: "60px", height: "60px" }} />
+            <div className="mt-3" style={{ fontWeight: "bold", color: "white", fontSize: "1.2rem" }}>
+              Subiendo archivo...
             </div>
           </div>
-          <div className="filter-group">
-            <label htmlFor="filterTipoMuebleEssence">Tipo Display Essence:</label>
-            <select id="filterTipoMuebleEssence" value={filterTipoMuebleEssence} onChange={(e) => setFilterTipoMuebleEssence(e.target.value)}>
-              <option value="">Todos</option>
-              {essenceOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="filterTipoMuebleCatrice">Tipo Mueble Catrice:</label>
-            <select id="filterTipoMuebleCatrice" value={filterTipoMuebleCatrice} onChange={(e) => setFilterTipoMuebleCatrice(e.target.value)}>
-              <option value="">Todos</option>
-              {catriceOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Año</label>
-            <input type="number" value={filterYear ?? ""} onChange={(e) => setFilterYear(e.target.value ? Number(e.target.value) : null)} placeholder="Año" />
-          </div>
-          <div className="filter-group">
-            <label>Mes</label>
-            <input type="number" value={filterMonth ?? ""} onChange={(e) => setFilterMonth(e.target.value ? Number(e.target.value) : null)} placeholder="Mes" min={1} max={12} />
-          </div>
-          <div className="filter-group">
-            <label>Día</label>
-            <input type="number" value={filterDay ?? ""} onChange={(e) => setFilterDay(e.target.value ? Number(e.target.value) : null)} placeholder="Día" min={1} max={31} />
-          </div>
-          <div className="filter-group">
-            <label>Marca</label>
-            <input type="text" value={filterMarca} onChange={(e) => setFilterMarca(e.target.value)} placeholder="Marca" />
-          </div>
-          <div className="filter-group">
-            <label>Rango de Fecha</label>
-            <input type="date" value={filterDateRange?.[0] ? new Date(filterDateRange[0]).toISOString().slice(0,10) : ""} onChange={(e) => {
-              const d = e.target.value ? new Date(e.target.value) : null;
-              setFilterDateRange(d ? [d, filterDateRange?.[1] || null] : null);
-            }} />
-            <input type="date" value={filterDateRange?.[1] ? new Date(filterDateRange[1]).toISOString().slice(0,10) : ""} onChange={(e) => {
-              const d = e.target.value ? new Date(e.target.value) : null;
-              setFilterDateRange(d ? [filterDateRange?.[0] || null, d] : null);
-            }} />
-          </div>
-        </div>
-        <div className="filter-actions">
-          <button className="btn-general" onClick={() => { /* filtros ya son reactivos */ }}>
-            <i className="fas fa-filter" /> Aplicar Filtros
-          </button>
-          <button
-            className="btn-general"
-            onClick={() => {
-              setFilter("");
-              setFilterTipoMuebleEssence("");
-              setFilterTipoMuebleCatrice("");
-            }}
-          >
-            <i className="fas fa-times" /> Limpiar Filtros
-          </button>
-        </div>
-      </div>
-
-      {/* Acciones */}
-      <div className="card-section">
-        <div className="actions-header">
-          <h3>Acciones</h3>
-          {selectedIds.length > 0 && (
-            <span className="selected-rows">
-              <i className="fas fa-check-square" /> {selectedIds.length} filas seleccionadas
-            </span>
-          )}
-        </div>
-        <div className="actions-buttons">
-          <button className={`btn-crud ${selectedIds.length === 0 ? "disabled" : ""}`} onClick={eliminarTipoMueblesSeleccionados} disabled={!selectedIds.length}>
-            <i className="fas fa-trash-alt" /> Eliminar Seleccionados
-          </button>
-        </div>
-      </div>
-
-      {/* Tabla */}
-      <div className="card-section table-section">
-        <h3>Listado de Tipos de Mueble</h3>
-        {loading ? (
-          <div className="loading-container">
-            <ProgressSpinner style={{ width: "50px", height: "50px" }} />
-            <p className="loading">Cargando tipos de mueble...</p>
-          </div>
-        ) : visibleTipoMuebles.length === 0 ? (
-          <div className="empty-state">
-            <i className="fas fa-search fa-3x" />
-            <p>No hay tipos de mueble disponibles con los filtros actuales.</p>
-          </div>
-        ) : (
-          <div className="table-responsive">
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    <input type="checkbox" checked={areAllVisibleSelected} onChange={handleSelectAll} />
-                  </th>
-                  <th>Código Cliente</th>
-                  <th>Nombre Cliente</th>
-                  <th>Ciudad</th>
-                  <th>Código PDV</th>
-                  <th>Nombre PDV</th>
-                  <th>Tipo Display Essence</th>
-                  <th>Tipo Mueble Display Catrice</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTipoMuebles.slice(paginatorState.first, paginatorState.first + paginatorState.rows).map((tm) => (
-                  <tr key={tm.id}>
-                    <td>
-                      <input type="checkbox" checked={selectedIds.includes(tm.id)} onChange={() => handleSelect(tm.id)} />
-                    </td>
-                    <td>{tm?.cliente?.codCliente ?? "N/A"}</td>
-                    <td>{tm?.cliente?.nombreCliente ?? "N/A"}</td>
-                    <td>{tm?.ciudad ?? "N/A"}</td>
-                    <td>{tm?.codPdv}</td>
-                    <td>{tm?.nombrePdv}</td>
-                    <td>{tm?.tipoMuebleEssence}</td>
-                    <td>{tm?.tipoMuebleCatrice}</td>
-                    <td className="action-buttons">
-                      <button className="btn-crud" onClick={() => setEditTipoMueble(tm)} title="Editar">
-                        <i className="fas fa-pencil-alt" />
-                      </button>
-                      <button className="btn-crud" onClick={() => eliminarTipoMueble(tm.id)} title="Eliminar">
-                        <i className="fas fa-trash-alt" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Paginator
-          first={paginatorState.first}
-          rows={paginatorState.rows}
-          totalRecords={paginatorState.totalRecords}
-          rowsPerPageOptions={[50, 100, 150, 200]}
-          onPageChange={(e) => setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }))}
-          template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown"
-          className="mt-3"
-        />
-      </div>
-
-      {/* Modal edición simple */}
-      {editTipoMueble && (
-        <div className="modal">
-          <div className="modal-content">
-            <h2>{editTipoMueble?.id ? "Editar Tipo de Mueble" : "Crear Tipo de Mueble"}</h2>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (editTipoMueble?.id) actualizarTipoMueble(editTipoMueble);
-                else crearTipoMueble(editTipoMueble);
-              }}
-            >
-              <label>Código Cliente:</label>
-              <input
-                type="text"
-                value={editTipoMueble?.cliente?.codCliente ?? ""}
-                onChange={(e) =>
-                  setEditTipoMueble((prev) => ({
-                    ...prev,
-                    cliente: { ...(prev?.cliente || {}), codCliente: e.target.value },
-                  }))
-                }
-              />
-
-              <label>Nombre Cliente:</label>
-              <input
-                type="text"
-                value={editTipoMueble?.cliente?.nombreCliente ?? ""}
-                onChange={(e) =>
-                  setEditTipoMueble((prev) => ({
-                    ...prev,
-                    cliente: { ...(prev?.cliente || {}), nombreCliente: e.target.value },
-                  }))
-                }
-              />
-
-              <label>Ciudad:</label>
-              <input type="text" value={editTipoMueble?.ciudad ?? ""} onChange={(e) => setEditTipoMueble({ ...editTipoMueble, ciudad: e.target.value })} />
-
-              <label>Código PDV:</label>
-              <input type="text" value={editTipoMueble?.codPdv ?? ""} onChange={(e) => setEditTipoMueble({ ...editTipoMueble, codPdv: e.target.value })} />
-
-              <label>Nombre PDV:</label>
-              <input type="text" value={editTipoMueble?.nombrePdv ?? ""} onChange={(e) => setEditTipoMueble({ ...editTipoMueble, nombrePdv: e.target.value })} />
-
-              <label>Tipo Mueble Essence:</label>
-              <select value={editTipoMueble?.tipoMuebleEssence ?? ""} onChange={(e) => setEditTipoMueble({ ...editTipoMueble, tipoMuebleEssence: e.target.value })}>
-                <option value="">Seleccione...</option>
-                {essenceOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-
-              <label>Tipo Mueble Catrice:</label>
-              <select value={editTipoMueble?.tipoMuebleCatrice ?? ""} onChange={(e) => setEditTipoMueble({ ...editTipoMueble, tipoMuebleCatrice: e.target.value })}>
-                <option value="">Seleccione...</option>
-                {catriceOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-
-              <div className="modal-actions">
-                <button type="submit" className="btn-crud">
-                  Guardar Cambios
-                </button>
-                <button type="button" className="btn-crud" onClick={() => setEditTipoMueble(null)}>
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
+
+      <div className="deprati-card card">
+        <h1 className="deprati-main-title text-center text-primary my-4">Tipos de Display Fybeca</h1>
+
+        <Toolbar className="deprati-toolbar mb-4" left={leftToolbarTemplate} right={rightToolbarTemplate} />
+
+        {/* Filtros (solo Essence + Catrice + búsqueda marca) */}
+        <Card className="deprati-filter-card mb-4">
+          <h3 className="deprati-section-title text-primary mb-3">Filtros</h3>
+
+          <div className="grid formgrid">
+            <div className="flex flex-wrap gap-8 align-items-end">
+              <div className="field">
+                <label className="deprati-label font-bold block mb-2">Tipo Display Essence</label>
+                <Dropdown
+                  value={filterTipoMuebleEssence}
+                  options={essenceOptions}
+                  onChange={(e) => setFilterTipoMuebleEssence(e.value || "")}
+                  placeholder="Todos"
+                  className="deprati-dropdown w-16rem"
+                  showClear
+                />
+              </div>
+
+              <div className="field">
+                <label className="deprati-label font-bold block mb-2">Tipo Display Catrice</label>
+                <Dropdown
+                  value={filterTipoMuebleCatrice}
+                  options={catriceOptions}
+                  onChange={(e) => setFilterTipoMuebleCatrice(e.value || "")}
+                  placeholder="Todos"
+                  className="deprati-dropdown w-16rem"
+                  showClear
+                />
+              </div>
+
+              <div className="field">
+                <label className="deprati-label font-bold block mb-2">Marca (búsqueda)</label>
+                <InputText
+                  value={filterMarca}
+                  onChange={(e) => setFilterMarca(e.target.value || "")}
+                  placeholder="Ej: essence, catrice..."
+                  className="deprati-search-input w-16rem"
+                />
+              </div>
+            </div>
+          </div>
+
+          <Divider className="deprati-divider" />
+
+          <div className="deprati-filter-actions flex justify-content-end gap-3 mt-3">
+            <Button
+              label="Limpiar"
+              icon="pi pi-times"
+              className="p-button-raised p-button-outlined deprati-button deprati-button-clear"
+              onClick={() => {
+                setFilterTipoMuebleEssence("");
+                setFilterTipoMuebleCatrice("");
+                setFilterMarca("");
+                setSelectedRows([]);
+                showInfo("Filtros limpiados");
+              }}
+            />
+          </div>
+        </Card>
+
+        {/* Tabla */}
+        <div className="card">
+          <DataTable
+            value={visibleTipoMuebles}
+            dataKey="id"
+            paginator
+            rows={50}
+            rowsPerPageOptions={[50, 100, 150, 200]}
+            responsiveLayout="scroll"
+            stripedRows
+            showGridlines
+            header={renderHeader}
+            emptyMessage={error ? `Error: ${error}` : "No se encontraron registros con los filtros."}
+            loading={loading}
+            selection={selectedRows}
+            onSelectionChange={(e) => {
+              const value = e.value || [];
+              if (value.length > 5000) {
+                showWarn("Solo puede seleccionar un máximo de 5000 registros.");
+                setSelectedRows(value.slice(0, 5000));
+              } else {
+                setSelectedRows(value);
+              }
+            }}
+            className="p-datatable-sm"
+            tableStyle={{ minWidth: "60rem" }}
+          >
+            <Column selectionMode="multiple" headerStyle={{ width: "3rem" }} />
+            <Column field="cliente.codCliente" header="Código Cliente" sortable />
+            <Column field="cliente.nombreCliente" header="Nombre Cliente" sortable />
+            <Column field="ciudad" header="Ciudad" sortable />
+            <Column field="codPdv" header="Código PDV" sortable />
+            <Column field="nombrePdv" header="Nombre PDV" sortable />
+            <Column field="tipoMuebleEssence" header="Tipo Display Essence" sortable />
+            <Column field="tipoMuebleCatrice" header="Tipo Display Catrice" sortable />
+            <Column body={actionTemplate} header="Acciones" exportable={false} style={{ width: "10rem" }} />
+          </DataTable>
+        </div>
+
+        {/* Dialog edición */}
+        <Dialog
+          visible={editTipoMueble !== null}
+          onHide={() => setEditTipoMueble(null)}
+          header={editTipoMueble?.id ? "Editar Tipo de Display" : "Nuevo Tipo de Display"}
+          className="deprati-edit-dialog p-fluid"
+          style={{ width: "55vw", maxWidth: "1100px" }}
+          modal
+          dismissableMask
+          footer={
+            <div className="flex justify-content-end gap-2">
+              <Button
+                label="Cancelar"
+                icon="pi pi-times"
+                className="p-button-outlined p-button-secondary"
+                onClick={() => setEditTipoMueble(null)}
+                type="button"
+              />
+              <Button
+                label={isSaving ? "Guardando..." : "Guardar"}
+                icon={isSaving ? "pi pi-spin pi-spinner" : "pi pi-check"}
+                className="p-button-primary"
+                disabled={isSaving}
+                onClick={() => {
+                  if (!editTipoMueble) return;
+                  if (editTipoMueble?.id) actualizarTipoMueble(editTipoMueble);
+                  else crearTipoMueble(editTipoMueble);
+                }}
+                type="button"
+              />
+            </div>
+          }
+        >
+          {editTipoMueble && (
+            <div className="p-3">
+              <div className="grid formgrid p-fluid">
+                <div className="col-12 md:col-6">
+                  <span className="p-float-label w-full">
+                    <InputText
+                      id="codCliente"
+                      value={editTipoMueble?.cliente?.codCliente ?? COD_CLIENTE_FIJO}
+                      onChange={(e) =>
+                        setEditTipoMueble((prev) => ({
+                          ...prev,
+                          cliente: { ...(prev?.cliente || {}), codCliente: e.target.value },
+                        }))
+                      }
+                    />
+                    <label htmlFor="codCliente">Código Cliente</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-6">
+                  <span className="p-float-label w-full">
+                    <InputText
+                      id="nombreCliente"
+                      value={editTipoMueble?.cliente?.nombreCliente ?? ""}
+                      onChange={(e) =>
+                        setEditTipoMueble((prev) => ({
+                          ...prev,
+                          cliente: { ...(prev?.cliente || {}), nombreCliente: e.target.value },
+                        }))
+                      }
+                    />
+                    <label htmlFor="nombreCliente">Nombre Cliente</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-4 mt-3">
+                  <span className="p-float-label w-full">
+                    <InputText
+                      id="ciudad"
+                      value={editTipoMueble?.ciudad ?? ""}
+                      onChange={(e) => setEditTipoMueble((p) => ({ ...p, ciudad: e.target.value }))}
+                    />
+                    <label htmlFor="ciudad">Ciudad</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-4 mt-3">
+                  <span className="p-float-label w-full">
+                    <InputText
+                      id="codPdv"
+                      value={editTipoMueble?.codPdv ?? ""}
+                      onChange={(e) => setEditTipoMueble((p) => ({ ...p, codPdv: e.target.value }))}
+                    />
+                    <label htmlFor="codPdv">Código PDV</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-4 mt-3">
+                  <span className="p-float-label w-full">
+                    <InputText
+                      id="nombrePdv"
+                      value={editTipoMueble?.nombrePdv ?? ""}
+                      onChange={(e) => setEditTipoMueble((p) => ({ ...p, nombrePdv: e.target.value }))}
+                    />
+                    <label htmlFor="nombrePdv">Nombre PDV</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-6 mt-3">
+                  <span className="p-float-label w-full">
+                    <Dropdown
+                      id="tipoMuebleEssence"
+                      value={editTipoMueble?.tipoMuebleEssence ?? ""}
+                      options={essenceOptions}
+                      onChange={(e) => setEditTipoMueble((p) => ({ ...p, tipoMuebleEssence: e.value || "" }))}
+                      placeholder="Seleccione..."
+                      className="w-full"
+                      showClear
+                    />
+                    <label htmlFor="tipoMuebleEssence">Tipo Display Essence</label>
+                  </span>
+                </div>
+
+                <div className="col-12 md:col-6 mt-3">
+                  <span className="p-float-label w-full">
+                    <Dropdown
+                      id="tipoMuebleCatrice"
+                      value={editTipoMueble?.tipoMuebleCatrice ?? ""}
+                      options={catriceOptions}
+                      onChange={(e) => setEditTipoMueble((p) => ({ ...p, tipoMuebleCatrice: e.value || "" }))}
+                      placeholder="Seleccione..."
+                      className="w-full"
+                      showClear
+                    />
+                    <label htmlFor="tipoMuebleCatrice">Tipo Display Catrice</label>
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Dialog>
+      </div>
     </div>
   );
 };

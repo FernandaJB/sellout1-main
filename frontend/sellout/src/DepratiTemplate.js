@@ -1,40 +1,42 @@
-
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import "./css/deprati.css";
 import "primereact/resources/themes/lara-light-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
 import "primeflex/primeflex.css";
-import 'primeicons/primeicons.css';
 
 import * as XLSX from "xlsx";
 import { Toast } from "primereact/toast";
 import { ProgressSpinner } from "primereact/progressspinner";
 import { Calendar } from "primereact/calendar";
-import { DataTable } from 'primereact/datatable';
-import { Column } from 'primereact/column';
-import { InputSwitch } from 'primereact/inputswitch';
-import { Button } from 'primereact/button';
-import { Dialog } from 'primereact/dialog';
-import { InputText } from 'primereact/inputtext';
-import { InputNumber } from 'primereact/inputnumber';
-import { Dropdown } from 'primereact/dropdown';
-import { Card } from 'primereact/card';
-import { Toolbar } from 'primereact/toolbar';
-import { Divider } from 'primereact/divider';
-import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
+import { DataTable } from "primereact/datatable";
+import { Column } from "primereact/column";
+import { InputSwitch } from "primereact/inputswitch";
+import { Button } from "primereact/button";
+import { Dialog } from "primereact/dialog";
+import { InputText } from "primereact/inputtext";
+import { InputNumber } from "primereact/inputnumber";
+import { Dropdown } from "primereact/dropdown";
+import { Card } from "primereact/card";
+import { Toolbar } from "primereact/toolbar";
+import { Divider } from "primereact/divider";
+import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
 const Deprati = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   // Estados núcleo
   const [ventas, setVentas] = useState([]);
-  const [filteredVentas, setFilteredVentas] = useState([]);  // vacío hasta que apliques un filtro
+  const [filteredVentas, setFilteredVentas] = useState([]); // vacío hasta que apliques un filtro
   const [loadingVentas, setLoadingVentas] = useState(false);
   const [selectedVentas, setSelectedVentas] = useState([]);
   const [editVenta, setEditVenta] = useState(null);
   const toast = useRef(null);
   const [ultimoNoEncontrados, setUltimoNoEncontrados] = useState([]);
+
+  // ✅ Mejoras UI
+  const [checkboxSelection, setCheckboxSelection] = useState(true); // switch selección por checkbox
+  const [noEncontradosDialogVisible, setNoEncontradosDialogVisible] = useState(false);
 
   // Carga/overlay/tiempos
   const [loadingTemplate, setLoadingTemplate] = useState(false);
@@ -72,57 +74,86 @@ const Deprati = () => {
   const [filterMarca, setFilterMarca] = useState("");
   const [filterDateRange, setFilterDateRange] = useState(null);
   const [marcas, setMarcas] = useState([]);
-  const [globalFilter, setGlobalFilter] = useState('');
+  const [globalFilter, setGlobalFilter] = useState("");
 
   // Paginación
   const [paginatorState, setPaginatorState] = useState({
     first: 0,
     rows: 50,
     page: 0,
-    totalRecords: 0
+    totalRecords: 0,
   });
   const [fullDataLoaded, setFullDataLoaded] = useState(false);
 
   useEffect(() => {
     loadMarcas();
     loadVentas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    setPaginatorState(prev => ({
+    setPaginatorState((prev) => ({
       ...prev,
       totalRecords: filteredVentas.length,
       first: 0,
-      page: 0
+      page: 0,
     }));
   }, [filteredVentas]);
 
   const onPageChange = async (event) => {
-    setPaginatorState(prev => ({ ...prev, first: event.first, rows: event.rows }));
+    setPaginatorState((prev) => ({ ...prev, first: event.first, rows: event.rows }));
   };
 
   // Años/meses
-  const years = useMemo(() => [...new Set(ventas.map(v => v.anio))].sort(), [ventas]);
+  const years = useMemo(() => [...new Set(ventas.map((v) => v.anio))].sort(), [ventas]);
   const months = [
-    { label: 'Enero', value: 1 },
-    { label: 'Febrero', value: 2 },
-    { label: 'Marzo', value: 3 },
-    { label: 'Abril', value: 4 },
-    { label: 'Mayo', value: 5 },
-    { label: 'Junio', value: 6 },
-    { label: 'Julio', value: 7 },
-    { label: 'Agosto', value: 8 },
-    { label: 'Septiembre', value: 9 },
-    { label: 'Octubre', value: 10 },
-    { label: 'Noviembre', value: 11 },
-    { label: 'Diciembre', value: 12 }
+    { label: "Enero", value: 1 },
+    { label: "Febrero", value: 2 },
+    { label: "Marzo", value: 3 },
+    { label: "Abril", value: 4 },
+    { label: "Mayo", value: 5 },
+    { label: "Junio", value: 6 },
+    { label: "Julio", value: 7 },
+    { label: "Agosto", value: 8 },
+    { label: "Septiembre", value: 9 },
+    { label: "Octubre", value: 10 },
+    { label: "Noviembre", value: 11 },
+    { label: "Diciembre", value: 12 },
   ];
 
   // ==== Utilidades de Toast ====
-  const showSuccess = (detail) => toast.current?.show({ severity: "success", summary: "Éxito", detail, life: 4000, className: "deprati-toast deprati-toast-success" });
-  const showInfo    = (detail) => toast.current?.show({ severity: "info",    summary: "Información", detail, life: 4000, className: "deprati-toast deprati-toast-info" });
-  const showWarn    = (detail) => toast.current?.show({ severity: "warn",    summary: "Advertencia", detail, life: 6000, className: "deprati-toast deprati-toast-warning" });
-  const showError   = (detail) => toast.current?.show({ severity: "error",   summary: "Error", detail, life: 6000, className: "deprati-toast deprati-toast-error" });
+  const showSuccess = (detail) =>
+    toast.current?.show({
+      severity: "success",
+      summary: "Éxito",
+      detail,
+      life: 4000,
+      className: "deprati-toast deprati-toast-success",
+    });
+  const showInfo = (detail) =>
+    toast.current?.show({
+      severity: "info",
+      summary: "Información",
+      detail,
+      life: 4000,
+      className: "deprati-toast deprati-toast-info",
+    });
+  const showWarn = (detail) =>
+    toast.current?.show({
+      severity: "warn",
+      summary: "Advertencia",
+      detail,
+      life: 6000,
+      className: "deprati-toast deprati-toast-warning",
+    });
+  const showError = (detail) =>
+    toast.current?.show({
+      severity: "error",
+      summary: "Error",
+      detail,
+      life: 6000,
+      className: "deprati-toast deprati-toast-error",
+    });
 
   // ==== Carga de datos ====
   const loadMarcas = async () => {
@@ -131,7 +162,9 @@ const Deprati = () => {
       if (!res.ok) throw new Error("Error al cargar marcas");
       const data = await res.json();
       setMarcas(Array.isArray(data) ? data : []);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const loadVentas = async () => {
@@ -142,18 +175,21 @@ const Deprati = () => {
       let all = [];
       while (true) {
         const qs = new URLSearchParams({ limit: String(batch), offset: String(offset) });
-        const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(60000) });
+        const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(300000) });
         if (!res.ok) throw new Error("Error al cargar ventas");
         const data = await res.json();
-        const chunk = (Array.isArray(data) ? data : []).map(v => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+        const chunk = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
         all = all.concat(chunk);
         if (chunk.length < batch) break;
         offset += batch;
       }
       all._fromApi = true;
       setVentas(all);
+
+      // por tu lógica actual: al cargar, dejas filtered = all
       setFilteredVentas(all);
-      setPaginatorState(prev => ({ ...prev, first: 0, rows: prev.rows || 50, page: 0, totalRecords: all.length }));
+
+      setPaginatorState((prev) => ({ ...prev, first: 0, rows: prev.rows || 50, page: 0, totalRecords: all.length }));
       setFullDataLoaded(true);
     } catch (e) {
       console.error(e);
@@ -165,15 +201,16 @@ const Deprati = () => {
 
   // ==== Normalización errores del backend ====
   const normalizeErrores = (result) => {
-    const toPair = (x, defaultMotivo = "Motivo no especificado") => (typeof x === "object"
-      ? { codigo: x.codigo ?? x.cod ?? x.code ?? x.id ?? "N/D", motivo: x.motivo ?? x.error ?? x.mensaje ?? defaultMotivo }
-      : { codigo: String(x), motivo: defaultMotivo });
+    const toPair = (x, defaultMotivo = "Motivo no especificado") =>
+      typeof x === "object"
+        ? { codigo: x.codigo ?? x.cod ?? x.code ?? x.id ?? "N/D", motivo: x.motivo ?? x.error ?? x.mensaje ?? defaultMotivo }
+        : { codigo: String(x), motivo: defaultMotivo };
 
-    if (Array.isArray(result?.codigosNoEncontrados)) return result.codigosNoEncontrados.map(x => toPair(x, "No se pudo mapear el código"));
+    if (Array.isArray(result?.codigosNoEncontrados)) return result.codigosNoEncontrados.map((x) => toPair(x, "No se pudo mapear el código"));
     if (Array.isArray(result?.errores)) return result.errores.map(toPair);
     if (Array.isArray(result?.itemsFallidos)) return result.itemsFallidos.map(toPair);
     if (Array.isArray(result)) return result.map(toPair);
-    if (Array.isArray(result?.lista)) return result.lista.map(c => ({ codigo: String(c), motivo: result?.motivo ?? "Motivo no especificado" }));
+    if (Array.isArray(result?.lista)) return result.lista.map((c) => ({ codigo: String(c), motivo: result?.motivo ?? "Motivo no especificado" }));
     return [];
   };
 
@@ -189,11 +226,15 @@ const Deprati = () => {
   const normalizeExitos = (result) => {
     const arr = result?.codigosExitosos ?? result?.exitos ?? result?.itemsProcesados ?? [];
     if (!Array.isArray(arr)) return [];
-    return arr.map(x => (typeof x === "object" ? (x.codigo ?? x.cod ?? x.code ?? x.id ?? "N/D") : String(x)));
+    return arr.map((x) => (typeof x === "object" ? x.codigo ?? x.cod ?? x.code ?? x.id ?? "N/D" : String(x)));
   };
 
   // ==== TXT de incidencias (siempre) ====
-  const buildIncidentTxt = ({ fileName, fileSizeBytes, startedAt, finishedAt, etaMsUsed, elapsedMsReal, filasLeidas, filasProcesadas, cantExitos, cantErrores, cantNoEncontrados }, errores, exitosos) => {
+  const buildIncidentTxt = (
+    { fileName, fileSizeBytes, startedAt, finishedAt, etaMsUsed, elapsedMsReal, filasLeidas, filasProcesadas, cantExitos, cantErrores, cantNoEncontrados },
+    errores,
+    exitosos
+  ) => {
     const fmt2 = (n) => n.toString().padStart(2, "0");
     const fmtHMS = (ms) => {
       const s = Math.floor(ms / 1000);
@@ -230,12 +271,12 @@ const Deprati = () => {
     }
     if (exitosos?.length) {
       lines.push("---- DETALLE CÓDIGOS EXITOSOS ----");
-      exitosos.forEach(c => lines.push(`OK: ${c}`));
+      exitosos.forEach((c) => lines.push(`OK: ${c}`));
       lines.push("");
     }
     if (errores?.length) {
       lines.push("---- DETALLE ERRORES / NO ENCONTRADOS ----");
-      errores.forEach(({ codigo, motivo }) => lines.push(`(el codigo : ${codigo}) - ${motivo || 'Motivo no especificado'}`));
+      errores.forEach(({ codigo, motivo }) => lines.push(`(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`));
       lines.push("");
     }
     lines.push("==============================================");
@@ -247,7 +288,7 @@ const Deprati = () => {
       if (window.showSaveFilePicker) {
         const handle = await window.showSaveFilePicker({
           suggestedName: filenameSuggested,
-          types: [{ description: "Archivo de texto", accept: { "text/plain": [".txt"] } }]
+          types: [{ description: "Archivo de texto", accept: { "text/plain": [".txt"] } }],
         });
         const writable = await handle.createWritable();
         await writable.write(content);
@@ -284,7 +325,7 @@ const Deprati = () => {
     const baseProcessingTime = 10000; // 10s
     const processingTimePerMB = 1000; // 1s/MB
     const uploadTimeMs = (mb / uploadSpeedMBps) * 1000;
-    const processingTimeMs = baseProcessingTime + (mb * processingTimePerMB);
+    const processingTimeMs = baseProcessingTime + mb * processingTimePerMB;
     const total = (uploadTimeMs + processingTimeMs) * 1.5;
     return Math.min(Math.max(total, 15000), 900000); // 15s..15min
   };
@@ -305,7 +346,6 @@ const Deprati = () => {
       const secs = Math.floor((remaining % 60000) / 1000);
       setCountdownText(`${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`);
 
-      // Si supera la ETA en 20%, avisar que tardará más
       if (elapsed > eta * 1.2 && elapsed < eta * 1.21) {
         showInfo("Parece que la carga tardará más de lo estimado. Aún procesando…");
       }
@@ -334,7 +374,7 @@ const Deprati = () => {
 
   const appendNumberParam = (fd, key, value) => {
     if (value !== undefined && value !== null && value !== "") {
-      const num = parseInt(value);
+      const num = parseInt(value, 10);
       if (!isNaN(num)) fd.append(key, num);
     }
   };
@@ -356,7 +396,6 @@ const Deprati = () => {
     appendNumberParam(formData, "columnaInicioPDV", mapeoExcel.colInicioPDV);
     appendNumberParam(formData, "columnaFinPDV", mapeoExcel.colFinPDV);
 
-    // ETA y cronómetro
     const eta = calculateUploadTime(file.size);
     startTimer(eta);
 
@@ -370,10 +409,9 @@ const Deprati = () => {
       detail: `Subiendo ${file.name}. DEPRATI: ${timeMessage}. No cierre esta ventana.`,
       life: 0,
       sticky: true,
-      className: "deprati-toast deprati-toast-info deprati-toast-persistent"
+      className: "deprati-toast deprati-toast-info deprati-toast-persistent",
     });
 
-    // Marca de inicio (precisa)
     const perfStart = performance.now();
     const wallStart = Date.now();
 
@@ -381,7 +419,7 @@ const Deprati = () => {
       const response = await fetch("/api-sellout/deprati/subir-archivos-motor-maping", {
         method: "POST",
         body: formData,
-        signal: AbortSignal.timeout(1800000) // 30min
+        signal: AbortSignal.timeout(1800000), // 30min
       });
 
       if (!response.ok) {
@@ -392,7 +430,6 @@ const Deprati = () => {
 
       const result = await response.json().catch(() => ({}));
 
-      // Marca de fin
       const perfEnd = performance.now();
       const wallEnd = Date.now();
       stopTimer();
@@ -404,11 +441,10 @@ const Deprati = () => {
       const exitos = normalizeExitos(result);
       setUltimoNoEncontrados(errores);
 
-      // Métricas (intenta leer del backend si existen)
       const filasLeidas = result?.filasLeidas ?? result?.rowsRead ?? result?.totalLeidas ?? null;
       const filasProcesadas = result?.filasProcesadas ?? result?.rowsProcessed ?? result?.procesadas ?? null;
       const cantNoEncontrados = errores.length;
-      const cantExitos = exitos.length || (typeof result?.exitosos === "number" ? result.exitosos : (typeof result?.insertados === "number" ? result.insertados : 0));
+      const cantExitos = exitos.length || (typeof result?.exitosos === "number" ? result.exitosos : typeof result?.insertados === "number" ? result.insertados : 0);
       const cantErrores = (typeof result?.erroresCount === "number" ? result.erroresCount : 0) + cantNoEncontrados;
 
       const metrics = {
@@ -422,10 +458,9 @@ const Deprati = () => {
         filasProcesadas,
         cantExitos,
         cantErrores,
-        cantNoEncontrados
+        cantNoEncontrados,
       };
 
-      // Mostrar opción de guardar TXT SIEMPRE
       toast.current?.show({
         severity: cantNoEncontrados > 0 ? "warn" : "info",
         sticky: true,
@@ -434,38 +469,42 @@ const Deprati = () => {
           <div className="flex flex-column gap-2">
             <div className="font-bold">{cantNoEncontrados > 0 ? "Códigos no encontrados detectados" : "Carga finalizada"}</div>
             <div>
-              Tiempo real: <b>{(metrics.elapsedMsReal/1000).toFixed(1)}s</b> — DEPRATI: <b>{(metrics.etaMsUsed/1000).toFixed(1)}s</b><br/>
-              Leídas: <b>{filasLeidas ?? "N/D"}</b> | Procesadas: <b>{filasProcesadas ?? "N/D"}</b><br/>
+              Tiempo real: <b>{(metrics.elapsedMsReal / 1000).toFixed(1)}s</b> — DEPRATI: <b>{(metrics.etaMsUsed / 1000).toFixed(1)}s</b>
+              <br />
+              Leídas: <b>{filasLeidas ?? "N/D"}</b> | Procesadas: <b>{filasProcesadas ?? "N/D"}</b>
+              <br />
               Éxitos: <b>{cantExitos}</b> | Errores: <b>{cantErrores}</b> | No encontrados: <b>{cantNoEncontrados}</b>
             </div>
-            <div className="flex gap-2">
-              <Button
-                label="Guardar TXT de incidencias"
-                icon="pi pi-save"
-                className="p-button-sm p-button-warning"
-                onClick={() => promptSaveIncidencias(metrics, errores, exitos)}
-              />
+            <div className="flex gap-2 flex-wrap">
+              <Button label="Guardar TXT de incidencias" icon="pi pi-save" className="p-button-sm p-button-warning" onClick={() => promptSaveIncidencias(metrics, errores, exitos)} />
               {cantNoEncontrados > 0 && (
-                <Button
-                  label="Guardar sólo NO ENCONTRADOS"
-                  icon="pi pi-file"
-                  className="p-button-sm p-button-help"
-                  onClick={() => {
-                    const header = "CODIGOS_NO_ENCOENTRADOS";
-                    const body = errores.map(({codigo, motivo}) => `(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`).join("\n");
-                    const contenido = [header, body].join("\n");
-                    const fechaStr = new Date(metrics.finishedAt).toISOString().replace(/[:T]/g, "-").split(".")[0];
-                    saveTxt(`codigos_no_encontrados_${fechaStr}.txt`, contenido);
-                  }}
-                />
+                <>
+                  <Button
+                    label="Ver No encontrados"
+                    icon="pi pi-eye"
+                    className="p-button-sm p-button-secondary"
+                    onClick={() => setNoEncontradosDialogVisible(true)}
+                  />
+                  <Button
+                    label="Guardar sólo NO ENCONTRADOS"
+                    icon="pi pi-file"
+                    className="p-button-sm p-button-help"
+                    onClick={() => {
+                      const header = "CODIGOS_NO_ENCONTRADOS";
+                      const body = errores.map(({ codigo, motivo }) => `(el codigo : ${codigo}) - ${motivo || "Motivo no especificado"}`).join("\n");
+                      const contenido = [header, body].join("\n");
+                      const fechaStr = new Date(metrics.finishedAt).toISOString().replace(/[:T]/g, "-").split(".")[0];
+                      saveTxt(`codigos_no_encontrados_${fechaStr}.txt`, contenido);
+                    }}
+                  />
+                </>
               )}
             </div>
           </div>
-        )
+        ),
       });
 
       await loadVentas();
-
     } catch (err) {
       stopTimer();
       setLoadingTemplate(false);
@@ -487,10 +526,12 @@ const Deprati = () => {
     try {
       const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
       const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
-      const filtered = ventas.filter(v => {
+
+      const filtered = ventas.filter((v) => {
         if (filterYear && Number(v.anio) !== Number(filterYear)) return false;
         if (filterMonth && Number(v.mes) !== Number(filterMonth)) return false;
-        if (filterMarca && (v.marca || "").toLowerCase() !== filterMarca.toLowerCase()) return false;
+        if (filterMarca && (v.marca || "").toLowerCase() !== String(filterMarca).toLowerCase()) return false;
+
         if (dateFrom || dateTo) {
           const dItem = new Date(Number(v.anio), Number(v.mes) - 1, Number(v.dia || 1));
           if (dateFrom) {
@@ -506,8 +547,9 @@ const Deprati = () => {
         }
         return true;
       });
+
       setFilteredVentas(filtered);
-      setPaginatorState(prev => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
       showInfo(`Se encontraron ${filtered.length} registros con los filtros aplicados`);
     } finally {
       setLoadingVentas(false);
@@ -519,18 +561,20 @@ const Deprati = () => {
     setFilterMonth("");
     setFilterMarca("");
     setFilterDateRange(null);
-    setFilteredVentas([]);  // permanece vacío hasta filtrar
-    setGlobalFilter('');
+
+    // tu lógica original: dejar vacío hasta filtrar
+    setFilteredVentas([]);
+    setGlobalFilter("");
   };
 
   // ==== Eliminar ====
   const executeDeleteSelected = async () => {
-    const ids = selectedVentas.map(v => v.id);
+    const ids = selectedVentas.map((v) => v.id);
     try {
       const res = await fetch("/api-sellout/deprati/ventas-forma-masiva", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ids)
+        body: JSON.stringify(ids),
       });
       if (!res.ok) throw new Error("Error al eliminar las ventas");
       showSuccess("Ventas eliminadas exitosamente");
@@ -547,28 +591,28 @@ const Deprati = () => {
     if (!selectedVentas.length) return;
     confirmDialog({
       message: `¿Está seguro de eliminar ${selectedVentas.length} venta(s)?`,
-      header: 'Confirmación de eliminación',
-      icon: 'pi pi-exclamation-triangle',
-      acceptLabel: 'Sí, eliminar',
-      rejectLabel: 'No, cancelar',
-      acceptClassName: 'p-button-danger deprati-confirm-button',
-      rejectClassName: 'p-button-secondary deprati-cancel-button',
-      className: 'deprati-confirm-dialog',
+      header: "Confirmación de eliminación",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Sí, eliminar",
+      rejectLabel: "No, cancelar",
+      acceptClassName: "p-button-danger deprati-confirm-button",
+      rejectClassName: "p-button-secondary deprati-cancel-button",
+      className: "deprati-confirm-dialog",
       closable: false,
-      accept: executeDeleteSelected
+      accept: executeDeleteSelected,
     });
   };
 
   const handleDelete = (id) => {
     confirmDialog({
-      message: '¿Está seguro de eliminar esta venta?',
-      header: 'Confirmación de eliminación',
-      icon: 'pi pi-exclamation-triangle',
-      acceptLabel: 'Sí, eliminar',
-      rejectLabel: 'No, cancelar',
-      acceptClassName: 'p-button-danger deprati-confirm-button',
-      rejectClassName: 'p-button-secondary deprati-cancel-button',
-      className: 'deprati-confirm-dialog',
+      message: "¿Está seguro de eliminar esta venta?",
+      header: "Confirmación de eliminación",
+      icon: "pi pi-exclamation-triangle",
+      acceptLabel: "Sí, eliminar",
+      rejectLabel: "No, cancelar",
+      acceptClassName: "p-button-danger deprati-confirm-button",
+      rejectClassName: "p-button-secondary deprati-cancel-button",
+      className: "deprati-confirm-dialog",
       closable: false,
       accept: async () => {
         try {
@@ -580,7 +624,7 @@ const Deprati = () => {
           console.error(e);
           showError(e.message || "Error al eliminar la venta");
         }
-      }
+      },
     });
   };
 
@@ -590,54 +634,56 @@ const Deprati = () => {
       showWarn("No hay datos filtrados para generar el reporte.");
       return;
     }
-    const ws = XLSX.utils.json_to_sheet(filteredVentas.map(item => ({
-      'Año': item.anio,
-      'Mes': item.mes,
-      'Día': item.dia,
-      'Marca': item.marca,
-      'Cliente': item.codCliente || (item.cliente ? item.cliente.codCliente : 'N/A'),
-      'Nombre Cliente': item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : 'N/A'),
-      'Código PDV': item.codPdv,
-      'PDV': item.pdv,
-      'Ciudad': item.ciudad,
-      'Producto': item.nombreProducto,
-      'Código Barra': item.codBarra,
-      'Stock ($)': item.stockDolares,
-      'Stock (U)': item.stockUnidades,
-      'Venta ($)': item.ventaDolares,
-      'Venta (U)': item.ventaUnidad
-    })));
-    const numberColumns = ['L','M','N','O'];
+    const ws = XLSX.utils.json_to_sheet(
+      filteredVentas.map((item) => ({
+        Año: item.anio,
+        Mes: item.mes,
+        Día: item.dia,
+        Marca: item.marca,
+        Cliente: item.codCliente || (item.cliente ? item.cliente.codCliente : "N/A"),
+        "Nombre Cliente": item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : "N/A"),
+        "Código PDV": item.codPdv,
+        PDV: item.pdv,
+        Ciudad: item.ciudad,
+        Producto: item.nombreProducto,
+        "Código Barra": item.codBarra,
+        "Stock ($)": item.stockDolares,
+        "Stock (U)": item.stockUnidades,
+        "Venta ($)": item.ventaDolares,
+        "Venta (U)": item.ventaUnidad,
+      }))
+    );
+    const numberColumns = ["L", "M", "N", "O"];
     for (let i = 2; i <= filteredVentas.length + 1; i++) {
-      numberColumns.forEach(col => {
+      numberColumns.forEach((col) => {
         const cell = ws[`${col}${i}`];
-        if (cell) cell.z = '#,##0.00';
+        if (cell) cell.z = "#,##0.00";
       });
     }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Reporte Filtrado");
     const today = new Date();
-    const dateStr = `${today.getDate()}-${today.getMonth()+1}-${today.getFullYear()}`;
+    const dateStr = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
     XLSX.writeFile(wb, `Reporte_Filtrado_Deprati_${dateStr}.xlsx`);
     showSuccess(`Se ha generado el reporte con ${filteredVentas.length} registros.`);
   };
 
   const downloadGeneralReport = async () => {
     try {
-      const resp = await fetch("/api-sellout/deprati/reporte-ventas", { method: "GET" });
+      const resp = await fetch("/api-sellout/deprati/reporte-ventas-zip", { method: "GET" });
       if (!resp.ok) throw new Error("Error al descargar reporte general");
       const cd = resp.headers.get("Content-Disposition");
-      const filename = cd ? cd.split("filename=")[1]?.replace(/\"/g, "") : "reporte_ventas_deprati.xlsx";
+      const filename = cd ? cd.split("filename=")[1]?.replace(/\"/g, "") : "deprati_ventas.zip";
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename || "reporte_ventas_deprati.xlsx";
+      a.download = filename || "deprati_ventas.zip";
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showInfo("Reporte general descargándose en segundo plano.");
+      showInfo("Reporte ZIP descargándose en segundo plano.");
     } catch (e) {
       showError(e.message);
     }
@@ -648,19 +694,27 @@ const Deprati = () => {
       showWarn("No hay datos para exportar.");
       return;
     }
-    const exportData = filteredVentas.map(item => ({
-      'Año': item.anio, 'Mes': item.mes, 'Día': item.dia, 'Marca': item.marca,
-      'Cliente': item.codCliente || (item.cliente ? item.cliente.codCliente : 'N/A'),
-      'Nombre Cliente': item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : 'N/A'),
-      'Código PDV': item.codPdv, 'PDV': item.pdv, 'Ciudad': item.ciudad,
-      'Producto': item.nombreProducto, 'Código Barra': item.codBarra,
-      'Stock ($)': item.stockDolares, 'Stock (U)': item.stockUnidades,
-      'Venta ($)': item.ventaDolares, 'Venta (U)': item.ventaUnidad
+    const exportData = filteredVentas.map((item) => ({
+      Año: item.anio,
+      Mes: item.mes,
+      Día: item.dia,
+      Marca: item.marca,
+      Cliente: item.codCliente || (item.cliente ? item.cliente.codCliente : "N/A"),
+      "Nombre Cliente": item.nombreCliente || (item.cliente ? item.cliente.nombreCliente : "N/A"),
+      "Código PDV": item.codPdv,
+      PDV: item.pdv,
+      Ciudad: item.ciudad,
+      Producto: item.nombreProducto,
+      "Código Barra": item.codBarra,
+      "Stock ($)": item.stockDolares,
+      "Stock (U)": item.stockUnidades,
+      "Venta ($)": item.ventaDolares,
+      "Venta (U)": item.ventaUnidad,
     }));
     const ws = XLSX.utils.json_to_sheet(exportData);
-    const numberColumns = ['L','M','N','O'];
+    const numberColumns = ["L", "M", "N", "O"];
     for (let i = 2; i <= exportData.length + 1; i++) {
-      numberColumns.forEach(col => {
+      numberColumns.forEach((col) => {
         const ref = `${col}${i}`;
         if (ws[ref]) ws[ref].z = "#,##0.00";
       });
@@ -678,22 +732,23 @@ const Deprati = () => {
         label="Importar Excel"
         icon="pi pi-file-excel"
         className="p-button-primary p-button-raised deprati-button deprati-import-excel-button"
-        onClick={() => document.getElementById('fileUploadInput')?.click()}
+        onClick={() => document.getElementById("fileUploadInput")?.click()}
       />
       <input
         id="fileUploadInput"
         type="file"
         accept=".xlsx,.xls"
-        style={{ display: 'none' }}
+        style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
           if (f) handleUpload(f);
-          e.target.value = '';
+          e.target.value = "";
         }}
       />
     </div>
   );
 
+  // ✅ Mejorado: agrega "Ver No encontrados"
   const rightToolbarTemplate = () => (
     <div className="deprati-toolbar-right flex flex-wrap align-items-center justify-content-end gap-3">
       <Button
@@ -701,9 +756,9 @@ const Deprati = () => {
         icon="pi pi-download"
         className="p-button-raised p-button-warning deprati-button deprati-button-warning"
         onClick={() => {
-          const link = document.createElement('a');
-          link.href = '/TEMPLATE_DEPRATI.xlsx';
-          link.download = 'TEMPLATE VENTAS DEPRATI.xlsx';
+          const link = document.createElement("a");
+          link.href = "/TEMPLATE_DEPRATI.xlsx";
+          link.download = "TEMPLATE VENTAS DEPRATI.xlsx";
           link.click();
         }}
       />
@@ -713,12 +768,7 @@ const Deprati = () => {
         className="p-button-success p-button-raised deprati-button deprati-button-export"
         onClick={exportToExcel}
       />
-      <Button
-        label="Reporte Ventas"
-        icon="pi pi-file-excel"
-        onClick={downloadGeneralReport}
-        className="p-button-success p-button-raised deprati-button"
-      />
+      <Button label="Reporte Ventas (ZIP)" icon="pi pi-file" onClick={downloadGeneralReport} className="p-button-success p-button-raised deprati-button" />
       <Button
         label="Reporte de Ventas Con Filtro"
         icon="pi pi-file-excel"
@@ -733,6 +783,15 @@ const Deprati = () => {
         disabled={!selectedVentas.length}
         onClick={handleDeleteSelected}
       />
+
+      <Button
+        label="Ver No encontrados"
+        icon="pi pi-eye"
+        className="p-button-raised p-button-secondary"
+        disabled={!ultimoNoEncontrados || ultimoNoEncontrados.length === 0}
+        onClick={() => setNoEncontradosDialogVisible(true)}
+      />
+
       <Button
         label="Guardar TXT (No encontrados)"
         icon="pi pi-save"
@@ -748,29 +807,45 @@ const Deprati = () => {
     </div>
   );
 
+  // ✅ Mejorado: incluye switch para activar checkboxes
   const renderHeader = () => (
-    <div className="deprati-table-header flex flex-wrap gap-2 align-items-center justify-content-between">
+    <div className="deprati-table-header flex flex-wrap gap-3 align-items-center justify-content-between">
       <h4 className="deprati-title m-0">Gestión de Ventas Deprati</h4>
-      <span className="deprati-search p-input-icon-left">
-        <i className="pi pi-search" />
-        <InputText
-          value={globalFilter}
-          onChange={(e) => {
-            const value = e.target.value;
-            setGlobalFilter(value);
-            if (value) {
-              const filtered = ventas.filter(item => (
-                Object.values(item).some(val => val?.toString?.().toLowerCase().includes(value.toLowerCase()))
-              ));
-              setFilteredVentas(filtered);
-            } else {
-              setFilteredVentas([]);  // permanece vacío hasta filtrar
-            }
-          }}
-          placeholder="Buscar..."
-          className="deprati-search-input"
-        />
-      </span>
+
+      <div className="flex align-items-center gap-3 flex-wrap">
+        <div className="flex align-items-center gap-2">
+          <span className="text-sm font-semibold">Selección (checkbox)</span>
+          <InputSwitch
+            checked={checkboxSelection}
+            onChange={(e) => {
+              setCheckboxSelection(e.value);
+              setSelectedVentas([]);
+            }}
+          />
+        </div>
+
+        {selectedVentas?.length > 0 && <span className="text-sm font-bold">Seleccionadas: {selectedVentas.length}</span>}
+
+        <span className="deprati-search p-input-icon-left">
+          <i className="pi pi-search" />
+          <InputText
+            value={globalFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              setGlobalFilter(value);
+
+              if (value) {
+                const filtered = ventas.filter((item) => Object.values(item).some((val) => val?.toString?.().toLowerCase().includes(value.toLowerCase())));
+                setFilteredVentas(filtered);
+              } else {
+                setFilteredVentas([]); // permanece vacío hasta filtrar
+              }
+            }}
+            placeholder="Buscar..."
+            className="deprati-search-input"
+          />
+        </span>
+      </div>
     </div>
   );
 
@@ -783,14 +858,14 @@ const Deprati = () => {
         className="p-button-rounded p-button-outlined p-button-info deprati-action-button deprati-edit-button"
         onClick={() => handleEdit(rowData)}
         tooltip="Editar"
-        tooltipOptions={{ position: 'top' }}
+        tooltipOptions={{ position: "top" }}
       />
       <Button
         icon="pi pi-trash"
         className="p-button-rounded p-button-outlined p-button-danger deprati-action-button deprati-delete-button"
         onClick={() => handleDelete(rowData.id)}
         tooltip="Eliminar"
-        tooltipOptions={{ position: 'top' }}
+        tooltipOptions={{ position: "top" }}
       />
     </div>
   );
@@ -815,7 +890,7 @@ const Deprati = () => {
       const res = await fetch(`/api-sellout/deprati/venta/${editVenta.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editVenta)
+        body: JSON.stringify(editVenta),
       });
       if (!res.ok) throw new Error("Error al editar la venta");
       setEditVenta(null);
@@ -836,7 +911,7 @@ const Deprati = () => {
       visible={mapeoExcelDialogVisible}
       onHide={() => setMapeoExcelDialogVisible(false)}
       header="Confirmar carga de archivo"
-      style={{ width: '30vw', maxWidth: 520 }}
+      style={{ width: "30vw", maxWidth: 520 }}
       modal
       closable={false}
       dismissableMask
@@ -845,13 +920,19 @@ const Deprati = () => {
           <Button
             label="Cancelar"
             icon="pi pi-times"
-            onClick={() => { setMapeoExcelDialogVisible(false); setSelectedFile(null); }}
+            onClick={() => {
+              setMapeoExcelDialogVisible(false);
+              setSelectedFile(null);
+            }}
             className="p-button-outlined p-button-secondary"
           />
           <Button
             label="Procesar Archivo"
             icon="pi pi-check"
-            onClick={() => { setMapeoExcelDialogVisible(false); if (selectedFile) handleUploadWithMapeo(selectedFile); }}
+            onClick={() => {
+              setMapeoExcelDialogVisible(false);
+              if (selectedFile) handleUploadWithMapeo(selectedFile);
+            }}
             className="p-button-primary"
             disabled={!selectedFile}
           />
@@ -878,12 +959,12 @@ const Deprati = () => {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.55)", // más visible
+            background: "rgba(0,0,0,0.55)",
             zIndex: 9999,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            flexDirection: "column"
+            flexDirection: "column",
           }}
         >
           <ProgressSpinner className="deprati-spinner" />
@@ -907,18 +988,22 @@ const Deprati = () => {
           <h3 className="deprati-section-title text-primary mb-3">Filtros de Búsqueda</h3>
           <div className="grid formgrid">
             <div className="col-12 md:col-3 field">
-              <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">Año</label>
+              <label htmlFor="filterYear" className="deprati-label font-bold block mb-2">
+                Año
+              </label>
               <Dropdown
                 id="filterYear"
                 value={filterYear}
-                options={years.map(y => ({ label: String(y), value: y }))}
+                options={years.map((y) => ({ label: String(y), value: y }))}
                 onChange={(e) => setFilterYear(e.value)}
                 placeholder="Seleccionar Año"
                 className="deprati-dropdown w-full"
               />
             </div>
             <div className="col-12 md:col-3 field">
-              <label htmlFor="filterMonth" className="deprati-label font-bold block mb-2">Mes</label>
+              <label htmlFor="filterMonth" className="deprati-label font-bold block mb-2">
+                Mes
+              </label>
               <Dropdown
                 id="filterMonth"
                 value={filterMonth}
@@ -929,18 +1014,22 @@ const Deprati = () => {
               />
             </div>
             <div className="col-12 md:col-3 field">
-              <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">Marca</label>
+              <label htmlFor="filterMarca" className="deprati-label font-bold block mb-2">
+                Marca
+              </label>
               <Dropdown
                 id="filterMarca"
                 value={filterMarca}
-                options={marcas.map(m => ({ label: m, value: m }))}
+                options={marcas.map((m) => ({ label: m, value: m }))}
                 onChange={(e) => setFilterMarca(e.value)}
                 placeholder="Seleccionar Marca"
                 className="deprati-dropdown w-full"
               />
             </div>
             <div className="col-12 md:col-3 field">
-              <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">Rango de Fecha</label>
+              <label htmlFor="filterDateRange" className="deprati-label font-bold block mb-2">
+                Rango de Fecha
+              </label>
               <Calendar
                 id="filterDateRange"
                 value={filterDateRange}
@@ -986,7 +1075,8 @@ const Deprati = () => {
             paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
             currentPageReportTemplate="Mostrando {first} a {last} de {totalRecords} registros"
             dataKey="id"
-            selectionMode={rowClick ? null : 'checkbox'}
+            // ✅ Mejorado: modo checkbox controlado por switch
+            selectionMode={checkboxSelection ? "checkbox" : null}
             selection={selectedVentas}
             onSelectionChange={(e) => {
               if (e.value.length > 5000) {
@@ -1005,55 +1095,56 @@ const Deprati = () => {
             emptyMessage="No se encontraron registros"
             loading={loadingVentas}
             className="p-datatable-sm"
-            tableStyle={{ minWidth: '50rem' }}
+            tableStyle={{ minWidth: "50rem" }}
             resizableColumns
             columnResizeMode="fit"
           >
-            <Column selectionMode="multiple" headerStyle={{ width: '3rem' }} headerCheckbox />
-            <Column field="anio" header="Año" sortable style={{ width: '8%' }} />
-            <Column field="mes" header="Mes" sortable style={{ width: '8%' }} />
-            <Column field="dia" header="Día" sortable style={{ width: '8%' }} />
-            <Column field="marca" header="Marca" sortable style={{ width: '10%' }} />
-            <Column field="codPdv" header="Código PDV" sortable style={{ width: '10%' }} />
-            <Column field="pdv" header="PDV" sortable style={{ width: '12%' }} />
-            <Column field="ciudad" header="Ciudad" sortable style={{ width: '10%' }} />
-            <Column field="nombreProducto" header="Producto" sortable style={{ width: '15%' }} />
-            <Column field="codBarra" header="Código Barra" sortable style={{ width: '10%' }} />
+            {/* ✅ Solo muestra checkbox column si está activo */}
+            {checkboxSelection && <Column selectionMode="multiple" headerStyle={{ width: "3rem" }} headerCheckbox />}
+            <Column field="anio" header="Año" sortable style={{ width: "8%" }} />
+            <Column field="mes" header="Mes" sortable style={{ width: "8%" }} />
+            <Column field="dia" header="Día" sortable style={{ width: "8%" }} />
+            <Column field="marca" header="Marca" sortable style={{ width: "10%" }} />
+            <Column field="codPdv" header="Código PDV" sortable style={{ width: "10%" }} />
+            <Column field="pdv" header="PDV" sortable style={{ width: "12%" }} />
+            <Column field="ciudad" header="Ciudad" sortable style={{ width: "10%" }} />
+            <Column field="nombreProducto" header="Producto" sortable style={{ width: "15%" }} />
+            <Column field="codBarra" header="Código Barra" sortable style={{ width: "10%" }} />
             <Column
               field="stockDolares"
               header="Stock ($)"
               sortable
-              body={(r) => r?.stockDolares !== undefined ? Number(r.stockDolares).toFixed(2) : "0.00"}
-              style={{ width: '10%' }}
+              body={(r) => (r?.stockDolares !== undefined ? Number(r.stockDolares).toFixed(2) : "0.00")}
+              style={{ width: "10%" }}
             />
             <Column
               field="stockUnidades"
               header="Stock (U)"
               sortable
-              body={(r) => r?.stockUnidades !== undefined ? Number(r.stockUnidades).toFixed(0) : "0"}
-              style={{ width: '10%' }}
+              body={(r) => (r?.stockUnidades !== undefined ? Number(r.stockUnidades).toFixed(0) : "0")}
+              style={{ width: "10%" }}
             />
             <Column
               field="ventaDolares"
               header="Venta ($)"
               sortable
-              body={(r) => r?.ventaDolares !== undefined ? Number(r.ventaDolares).toFixed(2) : "0.00"}
-              style={{ width: '10%' }}
+              body={(r) => (r?.ventaDolares !== undefined ? Number(r.ventaDolares).toFixed(2) : "0.00")}
+              style={{ width: "10%" }}
             />
             <Column
               field="ventaUnidad"
               header="Venta (U)"
               sortable
-              body={(r) => r?.ventaUnidad !== undefined ? Number(r.ventaUnidad).toFixed(0) : "0"}
-              style={{ width: '10%' }}
+              body={(r) => (r?.ventaUnidad !== undefined ? Number(r.ventaUnidad).toFixed(0) : "0")}
+              style={{ width: "10%" }}
             />
-            <Column body={actionBodyTemplate} exportable={false} style={{ width: '8%' }} header="Acciones" />
+            <Column body={actionBodyTemplate} exportable={false} style={{ width: "8%" }} header="Acciones" />
           </DataTable>
         </div>
 
         {/* Diálogo de edición */}
         <Dialog
-          key={editVenta?.id || 'new'}
+          key={editVenta?.id || "new"}
           visible={editVenta !== null}
           onHide={() => setEditVenta(null)}
           header={
@@ -1068,20 +1159,20 @@ const Deprati = () => {
             </div>
           }
           className="deprati-edit-dialog p-fluid surface-overlay shadow-3"
-          style={{ width: '70vw', maxWidth: '1200px' }}
+          style={{ width: "70vw", maxWidth: "1200px" }}
           modal
           closable={false}
           dismissableMask
-          breakpoints={{ '960px': '85vw', '641px': '95vw' }}
+          breakpoints={{ "960px": "85vw", "641px": "95vw" }}
         >
-          <form onSubmit={handleFormSubmit} className="deprati-form p-4" style={{ fontSize: '1.05rem' }}>
+          <form onSubmit={handleFormSubmit} className="deprati-form p-4" style={{ fontSize: "1.05rem" }}>
             <div className="p-4 mb-5 border-1 border-round surface-card shadow-2">
               <div className="text-lg font-semibold text-primary mb-3">Información General</div>
               <div className="grid formgrid p-fluid gap-4">
                 {[
-                  { id: 'anio', label: 'Año', value: editVenta?.anio },
-                  { id: 'mes', label: 'Mes', value: editVenta?.mes },
-                  { id: 'dia', label: 'Día', value: editVenta?.dia }
+                  { id: "anio", label: "Año", value: editVenta?.anio },
+                  { id: "mes", label: "Mes", value: editVenta?.mes },
+                  { id: "dia", label: "Día", value: editVenta?.dia },
                 ].map((f) => (
                   <div key={f.id} className="col-12 md:col-3">
                     <span className="p-float-label w-full">
@@ -1090,10 +1181,12 @@ const Deprati = () => {
                         value={f.value}
                         onValueChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                         useGrouping={false}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={f.id} style={{ fontSize: "1rem" }}>
+                        {f.label}
+                      </label>
                     </span>
                   </div>
                 ))}
@@ -1102,18 +1195,20 @@ const Deprati = () => {
                     <InputText
                       id="marca"
                       value={editVenta?.marca || ""}
-                      className={`w-full ${!editVenta?.marca ? 'p-invalid' : ''}`}
+                      className={`w-full ${!editVenta?.marca ? "p-invalid" : ""}`}
                       onChange={(e) => setEditVenta({ ...editVenta, marca: e.target.value })}
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="marca" style={{ fontSize: '1rem' }}>Marca</label>
+                    <label htmlFor="marca" style={{ fontSize: "1rem" }}>
+                      Marca
+                    </label>
                   </span>
                   {!editVenta?.marca && <small className="p-error">La marca es requerida</small>}
                 </div>
                 {[
-                  { id: 'codPdv', label: 'Código PDV' },
-                  { id: 'pdv', label: 'PDV' },
-                  { id: 'ciudad', label: 'Ciudad' }
+                  { id: "codPdv", label: "Código PDV" },
+                  { id: "pdv", label: "PDV" },
+                  { id: "ciudad", label: "Ciudad" },
                 ].map((f) => (
                   <div key={f.id} className="col-12 md:col-4">
                     <span className="p-float-label w-full">
@@ -1122,9 +1217,11 @@ const Deprati = () => {
                         value={editVenta?.[f.id] || ""}
                         onChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.target.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={f.id} style={{ fontSize: "1rem" }}>
+                        {f.label}
+                      </label>
                     </span>
                   </div>
                 ))}
@@ -1141,9 +1238,11 @@ const Deprati = () => {
                       value={editVenta?.nombreProducto || ""}
                       onChange={(e) => setEditVenta({ ...editVenta, nombreProducto: e.target.value })}
                       className="w-full"
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="nombreProducto" style={{ fontSize: '1rem' }}>Producto</label>
+                    <label htmlFor="nombreProducto" style={{ fontSize: "1rem" }}>
+                      Producto
+                    </label>
                   </span>
                 </div>
                 <div className="col-12 md:col-6">
@@ -1153,9 +1252,11 @@ const Deprati = () => {
                       value={editVenta?.codBarra || ""}
                       onChange={(e) => setEditVenta({ ...editVenta, codBarra: e.target.value })}
                       className="w-full"
-                      inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                      inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                     />
-                    <label htmlFor="codBarra" style={{ fontSize: '1rem' }}>Código de Barra</label>
+                    <label htmlFor="codBarra" style={{ fontSize: "1rem" }}>
+                      Código de Barra
+                    </label>
                   </span>
                 </div>
               </div>
@@ -1165,10 +1266,10 @@ const Deprati = () => {
               <div className="text-lg font-semibold text-primary mb-3">Información de Stock y Ventas</div>
               <div className="grid formgrid p-fluid gap-3">
                 {[
-                  { id: 'stockDolares', label: 'Stock ($)', mode: 'decimal' },
-                  { id: 'stockUnidades', label: 'Stock (U)' },
-                  { id: 'ventaDolares', label: 'Venta ($)', mode: 'decimal' },
-                  { id: 'ventaUnidad', label: 'Venta (U)' }
+                  { id: "stockDolares", label: "Stock ($)", mode: "decimal" },
+                  { id: "stockUnidades", label: "Stock (U)" },
+                  { id: "ventaDolares", label: "Venta ($)", mode: "decimal" },
+                  { id: "ventaUnidad", label: "Venta (U)" },
                 ].map((f) => (
                   <div key={f.id} className="col-12 md:col-4">
                     <span className="p-float-label w-full">
@@ -1177,11 +1278,13 @@ const Deprati = () => {
                         value={editVenta?.[f.id]}
                         onValueChange={(e) => setEditVenta({ ...editVenta, [f.id]: e.value })}
                         className="w-full"
-                        inputStyle={{ fontSize: '1.1rem', padding: '0.85rem', height: '3.2rem' }}
+                        inputStyle={{ fontSize: "1.1rem", padding: "0.85rem", height: "3.2rem" }}
                         mode={f.mode}
-                        minFractionDigits={f.mode === 'decimal' ? 2 : undefined}
+                        minFractionDigits={f.mode === "decimal" ? 2 : undefined}
                       />
-                      <label htmlFor={f.id} style={{ fontSize: '1rem' }}>{f.label}</label>
+                      <label htmlFor={f.id} style={{ fontSize: "1rem" }}>
+                        {f.label}
+                      </label>
                     </span>
                   </div>
                 ))}
@@ -1195,7 +1298,7 @@ const Deprati = () => {
                 onClick={() => setEditVenta(null)}
                 className="p-button-outlined p-button-secondary"
                 type="button"
-                style={{ fontSize: '1.05rem', padding: '0.75rem 1.5rem' }}
+                style={{ fontSize: "1.05rem", padding: "0.75rem 1.5rem" }}
               />
               <Button
                 label={isSaving ? "Guardando..." : "Guardar"}
@@ -1204,10 +1307,37 @@ const Deprati = () => {
                 type="submit"
                 autoFocus
                 className="p-button-primary"
-                style={{ fontSize: '1.05rem', padding: '0.75rem 1.5rem' }}
+                style={{ fontSize: "1.05rem", padding: "0.75rem 1.5rem" }}
               />
             </div>
           </form>
+        </Dialog>
+
+        {/* ✅ Dialog: No encontrados */}
+        <Dialog
+          visible={noEncontradosDialogVisible}
+          onHide={() => setNoEncontradosDialogVisible(false)}
+          header={`No encontrados (${ultimoNoEncontrados?.length || 0})`}
+          modal
+          dismissableMask
+          style={{ width: "60vw", maxWidth: 900 }}
+        >
+          <div className="mb-3">
+            <small>Aquí puedes revisar los códigos que no se encontraron y su motivo (según respuesta del backend).</small>
+          </div>
+
+          <DataTable
+            value={ultimoNoEncontrados || []}
+            paginator
+            rows={10}
+            rowsPerPageOptions={[10, 20, 50]}
+            responsiveLayout="scroll"
+            emptyMessage="No hay códigos no encontrados."
+            className="p-datatable-sm"
+          >
+            <Column field="codigo" header="Código" sortable />
+            <Column field="motivo" header="Motivo" sortable />
+          </DataTable>
         </Dialog>
       </div>
     </div>

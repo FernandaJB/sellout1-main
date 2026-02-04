@@ -7,6 +7,7 @@ import com.manamer.backend.business.sellout.models.Venta;
 import com.manamer.backend.business.sellout.repositories.VentaRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+import org.apache.poi.ss.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
@@ -15,11 +16,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.text.Normalizer;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -30,12 +31,10 @@ import java.util.stream.Collectors;
 public class FybecaVentaService {
 
     // ====== Config ======
-    // CodCliente por defecto (correcto):
     private static final String DEFAULT_COD_CLIENTE = "MZCL-000014";
     private static final ZoneId ZONE = ZoneId.systemDefault();
-    private static final String CARPETA_CODIGOS = "/creacion-codigos";
 
-    // ✅ MISMA REGLA: placeholder para evitar mezclar tiendas vacías/null
+    // placeholder para evitar mezclar tiendas vacías/null
     private static final String PDV_PLACEHOLDER = "SIN_TIENDA";
 
     private final VentaRepository ventaRepository;
@@ -49,25 +48,154 @@ public class FybecaVentaService {
         this.clienteService = clienteService;
     }
 
-    // ====== Helpers ======
+    // ====== Helpers Cliente ======
     private Cliente getClienteOrThrow(String codCliente) {
         return clienteService.findByCodCliente(codCliente)
                 .orElseThrow(() -> new IllegalStateException("Cliente no existe: " + codCliente));
     }
 
-    /**
-     * ✅ MISMA REGLA:
-     * Normaliza codPdv para evitar que null/"" actualice registros de otra tienda.
-     */
+    // Normaliza codPdv
     private static String normalizarCodPdv(String codPdv) {
         if (codPdv == null) return PDV_PLACEHOLDER;
         String t = codPdv.trim();
         return t.isEmpty() ? PDV_PLACEHOLDER : t;
     }
 
-    // ====== Consultas CRUD ======
+    // ====== Helpers headers dinámicos ======
+    private static String norm(String s) {
+        if (s == null) return "";
+        String x = s.trim().toLowerCase(Locale.ROOT);
+        x = Normalizer.normalize(x, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        x = x.replaceAll("[^a-z0-9]+", "_");
+        x = x.replaceAll("^_+|_+$", "");
+        return x;
+    }
 
-    /** Genérico: obtener todas las ventas por codCliente */
+    private static Integer findHeaderRow(Sheet sheet, Set<String> requiredHeadersNorm, int maxScanRows) {
+        int last = Math.min(sheet.getLastRowNum(), maxScanRows);
+        for (int r = 0; r <= last; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            Set<String> headers = new HashSet<>();
+            for (int c = 0; c < Math.min(row.getLastCellNum(), 150); c++) {
+                Cell cell = row.getCell(c);
+                if (cell == null) continue;
+                if (cell.getCellType() == CellType.STRING) {
+                    String h = norm(cell.getStringCellValue());
+                    if (!h.isBlank()) headers.add(h);
+                }
+            }
+            boolean ok = requiredHeadersNorm.stream().allMatch(headers::contains);
+            if (ok) return r;
+        }
+        return null;
+    }
+
+    private static Map<String, Integer> buildHeaderIndex(Sheet sheet, int headerRow) {
+        Row row = sheet.getRow(headerRow);
+        Map<String, Integer> map = new HashMap<>();
+        if (row == null) return map;
+        for (int c = 0; c < row.getLastCellNum(); c++) {
+            Cell cell = row.getCell(c);
+            if (cell == null) continue;
+            String raw = (cell.getCellType() == CellType.STRING) ? cell.getStringCellValue() : null;
+            String key = norm(raw);
+            if (!key.isBlank()) map.put(key, c);
+        }
+        return map;
+    }
+
+    private static Integer pick(Map<String, Integer> header, String... optionsNorm) {
+        for (String o : optionsNorm) {
+            Integer idx = header.get(o);
+            if (idx != null) return idx;
+        }
+        return null;
+    }
+
+    // ====== Lectura de celdas ======
+    private String getString(Row row, Integer col) {
+        if (col == null) return null;
+        Cell cell = row.getCell(col);
+        if (cell == null) return null;
+
+        return switch (cell.getCellType()) {
+            case STRING -> {
+                String s = cell.getStringCellValue();
+                yield (s == null ? null : s.trim());
+            }
+            case NUMERIC -> {
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    LocalDate d = cell.getDateCellValue().toInstant().atZone(ZONE).toLocalDate();
+                    yield d.toString();
+                }
+                yield String.valueOf((long) cell.getNumericCellValue());
+            }
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> {
+                try { yield cell.getStringCellValue().trim(); }
+                catch (Exception ex) { yield cell.getCellFormula(); }
+            }
+            default -> null;
+        };
+    }
+
+    private Double getDouble(Row row, Integer col) {
+        if (col == null) return null;
+        Cell cell = row.getCell(col);
+        if (cell == null) return null;
+
+        if (cell.getCellType() == CellType.NUMERIC) return cell.getNumericCellValue();
+        if (cell.getCellType() == CellType.STRING) {
+            String s = cell.getStringCellValue();
+            if (s == null) return null;
+            s = s.trim().replace(",", ".");
+            if (s.isBlank()) return null;
+            try { return Double.parseDouble(s); } catch (Exception ignore) { return null; }
+        }
+        return null;
+    }
+
+    private Date getDate(Row row, Integer col) {
+        if (col == null) return null;
+        Cell cell = row.getCell(col);
+        if (cell == null) return null;
+
+        try {
+            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+                return cell.getDateCellValue();
+            }
+            if (cell.getCellType() == CellType.NUMERIC) {
+                return DateUtil.getJavaDate(cell.getNumericCellValue());
+            }
+            if (cell.getCellType() == CellType.STRING) {
+                String s = cell.getStringCellValue();
+                if (s == null) return null;
+                s = s.trim();
+                if (s.isBlank()) return null;
+
+                // intenta ISO yyyy-MM-dd
+                try {
+                    LocalDate ld = LocalDate.parse(s);
+                    return Date.from(ld.atStartOfDay(ZONE).toInstant());
+                } catch (Exception ignore) {}
+
+                // intenta dd/MM/yyyy
+                try {
+                    DateTimeFormatter f = DateTimeFormatter.ofPattern("d/M/uuuu");
+                    LocalDate ld = LocalDate.parse(s, f);
+                    return Date.from(ld.atStartOfDay(ZONE).toInstant());
+                } catch (Exception ignore) {}
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
+    // =====================================================================================
+    // ==================================== CRUD ==========================================
+    // =====================================================================================
+
     public List<Venta> obtenerTodasLasVentasPorCodCliente(String codCliente) {
         String jpql = "SELECT v FROM Venta v WHERE v.cliente.codCliente = :cod";
         return entityManager.createQuery(jpql, Venta.class)
@@ -75,7 +203,6 @@ public class FybecaVentaService {
                 .getResultList();
     }
 
-    /** Wrapper: compatibilidad para el default (MZCL-000014) */
     public List<Venta> obtenerTodasLasVentasFybeca() {
         return obtenerTodasLasVentasPorCodCliente(DEFAULT_COD_CLIENTE);
     }
@@ -90,16 +217,19 @@ public class FybecaVentaService {
     ) {
         if (limit == null || limit <= 0) limit = 1000;
         if (offset == null || offset < 0) offset = 0;
+
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad, c.cod_Cliente, c.nombre_Cliente ")
-           .append("FROM [SELLOUT].[dbo].[venta] v ")
-           .append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ")
-           .append("WHERE c.cod_Cliente = :cod ");
+                .append("FROM [SELLOUT].[dbo].[venta] v ")
+                .append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ")
+                .append("WHERE c.cod_Cliente = :cod ");
+
         if (anio != null) sql.append("AND v.anio = :anio ");
         if (mes != null) sql.append("AND v.mes = :mes ");
         if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
+
         sql.append("ORDER BY v.anio DESC, v.mes DESC, v.id DESC ")
-           .append("OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY");
+                .append("OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY");
 
         Query q = entityManager.createNativeQuery(sql.toString());
         q.setParameter("cod", codCliente);
@@ -137,7 +267,67 @@ public class FybecaVentaService {
         return out;
     }
 
-    /** Genérico: obtener una venta por id y codCliente */
+    @Transactional(readOnly = true)
+    public void escribirReporteVentasZip(java.io.OutputStream os, String codCliente, Integer anio, Integer mes, String marca) {
+        try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(os);
+             java.io.OutputStreamWriter osw = new java.io.OutputStreamWriter(zip, java.nio.charset.StandardCharsets.UTF_8);
+             java.io.BufferedWriter bw = new java.io.BufferedWriter(osw)) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("fybeca_ventas.csv"));
+            bw.write("\uFEFF");
+            bw.write("id,anio,mes,dia,marca,nombreProducto,codBarra,codigoSap,descripcion,codPdv,pdv,ciudad,stockDolares,stockUnidades,ventaDolares,ventaUnidad,codCliente,nombreCliente");
+            bw.newLine();
+            int pageSize = 10000;
+            int offset = 0;
+            while (true) {
+                StringBuilder sql = new StringBuilder();
+                sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, ");
+                sql.append("v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad, ");
+                sql.append("c.cod_Cliente, c.nombre_Cliente ");
+                sql.append("FROM [SELLOUT].[dbo].[venta] v ");
+                sql.append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ");
+                sql.append("WHERE c.cod_Cliente = :cod ");
+                if (anio != null) sql.append("AND v.anio = :anio ");
+                if (mes != null) sql.append("AND v.mes = :mes ");
+                if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
+                sql.append("ORDER BY v.anio DESC, v.mes DESC, v.dia DESC, v.id DESC ");
+                Query q = entityManager.createNativeQuery(sql.toString());
+                q.setParameter("cod", codCliente);
+                if (anio != null) q.setParameter("anio", anio);
+                if (mes != null) q.setParameter("mes", mes);
+                if (marca != null && !marca.isBlank()) q.setParameter("marca", marca.trim());
+                q.setFirstResult(offset);
+                q.setMaxResults(pageSize);
+                @SuppressWarnings("unchecked")
+                java.util.List<Object[]> rows = q.getResultList();
+                if (rows.isEmpty()) break;
+                for (Object[] r : rows) {
+                    StringBuilder line = new StringBuilder();
+                    line.append(toCsv(r[0])).append(',').append(toCsv(r[1])).append(',').append(toCsv(r[2])).append(',').append(toCsv(r[3])).append(',');
+                    line.append(toCsv(r[4])).append(',').append(toCsv(r[5])).append(',').append(toCsv(r[6])).append(',').append(toCsv(r[7])).append(',');
+                    line.append(toCsv(r[8])).append(',').append(toCsv(r[9])).append(',').append(toCsv(r[10])).append(',').append(toCsv(r[11])).append(',');
+                    line.append(toCsv(r[12])).append(',').append(toCsv(r[13])).append(',').append(toCsv(r[14])).append(',').append(toCsv(r[15])).append(',');
+                    line.append(toCsv(r[16])).append(',').append(toCsv(r[17]));
+                    bw.write(line.toString());
+                    bw.newLine();
+                }
+                bw.flush();
+                offset += pageSize;
+            }
+            bw.flush();
+            zip.closeEntry();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String toCsv(Object v) {
+        if (v == null) return "";
+        String s = String.valueOf(v);
+        boolean needQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
+        if (s.contains("\"")) s = s.replace("\"", "\"\"");
+        return needQuote ? "\"" + s + "\"" : s;
+    }
+
     public Optional<Venta> obtenerVentaPorIdYCodCliente(Long id, String codCliente) {
         String jpql = "SELECT v FROM Venta v WHERE v.id = :id AND v.cliente.codCliente = :cod";
         List<Venta> res = entityManager.createQuery(jpql, Venta.class)
@@ -147,12 +337,10 @@ public class FybecaVentaService {
         return res.isEmpty() ? Optional.empty() : Optional.of(res.get(0));
     }
 
-    /** Wrapper: compatibilidad para el default (MZCL-000014) */
     public Optional<Venta> obtenerVentaFybecaPorId(Long id) {
         return obtenerVentaPorIdYCodCliente(id, DEFAULT_COD_CLIENTE);
     }
 
-    /** Eliminar una venta por ID (sin depender del cliente) */
     public boolean eliminarVenta(Long id) {
         return ventaRepository.findById(id).map(v -> {
             ventaRepository.delete(v);
@@ -160,7 +348,6 @@ public class FybecaVentaService {
         }).orElse(false);
     }
 
-    /** Eliminar ventas masivo por IDs (sin depender del cliente) */
     public boolean eliminarVentas(List<Long> ids) {
         try {
             List<Venta> ventas = ventaRepository.findAllById(ids);
@@ -171,103 +358,51 @@ public class FybecaVentaService {
         }
     }
 
-    // ====== Update / Upsert ======
+    // =====================================================================================
+    // ============================= INSERT ONLY (NO UPDATE) ===============================
+    // =====================================================================================
 
-    /** Genérico: actualizar por ID y codCliente (forzando cliente con ID real) */
+    /** ✅ SOLO INSERTA: NO busca existente, NO actualiza */
     @Transactional
-    public Venta actualizarVentaPorCodCliente(Long id, String codCliente, Venta nuevaVenta) {
-        Cliente cliente = getClienteOrThrow(codCliente);
-        nuevaVenta.setCliente(cliente); // garantiza ID correcto
-        return ventaRepository.findById(id).map(v -> {
-            v.setAnio(nuevaVenta.getAnio());
-            v.setMes(nuevaVenta.getMes());
-            v.setDia(nuevaVenta.getDia());
-            v.setMarca(nuevaVenta.getMarca());
-            v.setVentaDolares(nuevaVenta.getVentaDolares());
-            v.setVentaUnidad(nuevaVenta.getVentaUnidad());
-            v.setNombreProducto(nuevaVenta.getNombreProducto());
-            v.setCodigoSap(nuevaVenta.getCodigoSap());
-            v.setCodBarra(nuevaVenta.getCodBarra());
-            v.setCodPdv(nuevaVenta.getCodPdv());
-            v.setDescripcion(nuevaVenta.getDescripcion());
-            v.setPdv(nuevaVenta.getPdv());
-            v.setStockDolares(nuevaVenta.getStockDolares());
-            v.setStockUnidades(nuevaVenta.getStockUnidades());
-            v.setCiudad(nuevaVenta.getCiudad());
-            v.setCliente(cliente);
-            v.setProducto(nuevaVenta.getProducto());
-            return ventaRepository.save(v);
-        }).orElseThrow(() -> new RuntimeException("Venta no encontrada con el ID: " + id));
-    }
-
-    /** Wrapper: actualizar usando default (MZCL-000014) */
-    @Transactional
-    public Venta actualizarVentaFybeca(Long id, Venta nuevaVenta) {
-        return actualizarVentaPorCodCliente(id, DEFAULT_COD_CLIENTE, nuevaVenta);
-    }
-
-    /** NUEVO: Upsert recibiendo Cliente (garantiza cliente_id correcto) */
-    @Transactional
-    public void guardarOActualizarVenta(Cliente cliente, Venta nuevaVenta) {
+    public void guardarVentaSoloInsert(Cliente cliente, Venta nuevaVenta) {
         nuevaVenta.setCliente(cliente); // ID real
-        String codBarra = (nuevaVenta.getCodBarra() == null) ? null : nuevaVenta.getCodBarra().trim();
 
-        // ✅ MISMA REGLA: codPdv null/"" => "SIN_TIENDA"
+        String codBarra = (nuevaVenta.getCodBarra() == null) ? null : nuevaVenta.getCodBarra().trim();
         String codPdv = normalizarCodPdv(nuevaVenta.getCodPdv());
 
         nuevaVenta.setCodBarra(codBarra);
         nuevaVenta.setCodPdv(codPdv);
 
-        Optional<Venta> existente = ventaRepository
-                .findByClienteIdAndAnioAndMesAndDiaAndCodBarraAndCodPdv(
-                        cliente.getId(),
-                        nuevaVenta.getAnio(),
-                        nuevaVenta.getMes(),
-                        nuevaVenta.getDia(),
-                        nuevaVenta.getCodBarra(),
-                        nuevaVenta.getCodPdv()
-                );
-
-        if (existente.isPresent()) {
-            Venta v = existente.get();
-            v.setVentaDolares(nuevaVenta.getVentaDolares());
-            v.setVentaUnidad(nuevaVenta.getVentaUnidad());
-            v.setStockDolares(nuevaVenta.getStockDolares());
-            v.setStockUnidades(nuevaVenta.getStockUnidades());
-            v.setPdv(nuevaVenta.getPdv());
-            v.setCiudad(nuevaVenta.getCiudad());
-            v.setMarca(nuevaVenta.getMarca());
-            v.setNombreProducto(nuevaVenta.getNombreProducto());
-            v.setCodigoSap(nuevaVenta.getCodigoSap());
-            v.setDescripcion(nuevaVenta.getDescripcion());
-            v.setProducto(nuevaVenta.getProducto());
-            v.setCliente(cliente); // reafirma cliente/id
-            v.setCodPdv(normalizarCodPdv(v.getCodPdv())); // ✅ asegura consistencia también en el existente
-            ventaRepository.save(v);
-        } else {
-            ventaRepository.save(nuevaVenta);
-        }
+        ventaRepository.save(nuevaVenta);
     }
 
-    /** Genérico: Upsert recibiendo codCliente */
     @Transactional
-    public void guardarOActualizarVentaPorCodCliente(String codCliente, Venta nuevaVenta) {
+    public void guardarVentaSoloInsertPorCodCliente(String codCliente, Venta nuevaVenta) {
         Cliente cliente = getClienteOrThrow(codCliente);
-        guardarOActualizarVenta(cliente, nuevaVenta);
+        guardarVentaSoloInsert(cliente, nuevaVenta);
     }
 
-    /** Wrapper: upsert usando default (MZCL-000014) */
     @Transactional
-    public void guardarOActualizarVentaFybeca(Venta nuevaVenta) {
-        guardarOActualizarVentaPorCodCliente(DEFAULT_COD_CLIENTE, nuevaVenta);
+    public void guardarVentaSoloInsertFybeca(Venta nuevaVenta) {
+        guardarVentaSoloInsertPorCodCliente(DEFAULT_COD_CLIENTE, nuevaVenta);
     }
 
-    // ====== Carga de datos de producto (enriquecimiento por fila) ======
+    // =====================================================================================
+    // =================== Validación ÚNICA: producto por codItem ==========================
+    // =====================================================================================
 
-    /** NUEVO: Enriquecer usando Cliente (NO reemplaza el cliente de la venta) */
-    public boolean cargarDatosDeProducto(Cliente cliente, Venta venta, Set<String> codigosNoEncontrados) {
-        String codigo = venta.getCodBarra();
-        if (codigo == null || codigo.trim().isEmpty()) return false;
+    /**
+     * ✅ SOLO valida por codItem:
+     * - Busca producto por p.cod_Item = :codigo
+     * - Si no encuentra: agrega a codigosNoEncontrados y retorna false
+     * - Si encuentra: setea producto_id en la venta y retorna true
+     */
+    public boolean cargarProductoPorCodItem(Cliente cliente, Venta venta, Set<String> codigosNoEncontrados) {
+        String codigo = venta.getCodBarra(); // aquí viene el codItem desde el Excel
+        if (codigo == null || codigo.trim().isEmpty()) {
+            if (codigosNoEncontrados != null) codigosNoEncontrados.add("CODITEM_VACIO");
+            return false;
+        }
         codigo = codigo.trim();
 
         try {
@@ -275,14 +410,9 @@ public class FybecaVentaService {
                 SELECT TOP 1
                     p.id            AS IdProducto,
                     p.cod_Item      AS CodItem,
-                    p.cod_Barra_Sap AS CodBarraSap,
-                    sp.codigo_sap   AS CodProd,
-                    sp.cod_barra    AS CodBarra,
-                    sp.descripcion  AS Descripcion,
-                    sp.marca        AS Marca
+                    p.cod_Barra_Sap AS CodBarraSap
                 FROM SELLOUT.dbo.producto p
-                LEFT JOIN SELLOUT.dbo.SAP_Prod_cache sp ON sp.cod_barra = p.cod_Barra_Sap
-                WHERE (p.cod_Item = :codigo OR p.cod_Barra_Sap = :codigo)
+                WHERE p.cod_Item = :codigo
             """;
             Query q = entityManager.createNativeQuery(sql);
             q.setParameter("codigo", codigo);
@@ -294,7 +424,6 @@ public class FybecaVentaService {
                 return false;
             }
 
-            // Mantiene el cliente con ID real
             venta.setCliente(cliente);
 
             Object[] r = rows.get(0);
@@ -302,14 +431,8 @@ public class FybecaVentaService {
             p.setId(((Number) r[0]).longValue());
             p.setCodItem((String) r[1]);
             p.setCodBarraSap((String) r[2]);
+
             venta.setProducto(p);
-
-            venta.setCodigoSap((String) r[3]);
-            venta.setCodBarra(((String) r[4]).trim());
-            venta.setDescripcion((String) r[5]);
-            venta.setNombreProducto((String) r[5]);
-            venta.setMarca((String) r[6]);
-
             return true;
         } catch (Exception ex) {
             if (codigosNoEncontrados != null) codigosNoEncontrados.add(codigo);
@@ -317,22 +440,291 @@ public class FybecaVentaService {
         }
     }
 
-    /** Wrapper: sigue aceptando codCliente */
-    public boolean cargarDatosDeProducto(String codCliente, Venta venta, Set<String> codigosNoEncontrados) {
+    // =====================================================================================
+    // =================== Enriquecer desde SAP_Prod_cache (SIN PISAR) =====================
+    // =====================================================================================
+
+    /**
+     * ✅ Completa codigoSap/marca/descripcion/nombreProducto SOLO si están vacíos.
+     * Se busca por cod_barra (usa el codBarraSap real del producto).
+     */
+    private void enriquecerDesdeSapCacheSiFalta(Venta v) {
+        String codBarra = v.getCodBarra();
+        if (codBarra == null || codBarra.trim().isEmpty()) return;
+
+        try {
+            String sql = """
+                SELECT TOP 1
+                    codigo_sap,
+                    cod_barra,
+                    descripcion,
+                    marca
+                FROM SELLOUT.dbo.SAP_Prod_cache
+                WHERE cod_barra = :cb
+            """;
+            Query q = entityManager.createNativeQuery(sql);
+            q.setParameter("cb", codBarra.trim());
+
+            @SuppressWarnings("unchecked")
+            List<Object[]> rows = q.getResultList();
+            if (rows.isEmpty()) return;
+
+            Object[] r = rows.get(0);
+            String codigoSap = (String) r[0];
+            String cb = (String) r[1];
+            String desc = (String) r[2];
+            String marca = (String) r[3];
+
+            // ✅ NO PISAR: solo llena si viene vacío
+            if (v.getCodigoSap() == null || v.getCodigoSap().trim().isEmpty()) v.setCodigoSap(codigoSap);
+
+            // codBarra: si por alguna razón está vacío, se completa
+            if ((v.getCodBarra() == null || v.getCodBarra().trim().isEmpty()) && cb != null) v.setCodBarra(cb.trim());
+
+            if (v.getDescripcion() == null || v.getDescripcion().trim().isEmpty()) v.setDescripcion(desc);
+            if (v.getNombreProducto() == null || v.getNombreProducto().trim().isEmpty()) v.setNombreProducto(desc);
+            if (v.getMarca() == null || v.getMarca().trim().isEmpty()) v.setMarca(marca);
+
+        } catch (Exception ignore) {
+            // no cortar carga
+        }
+    }
+
+    // =====================================================================================
+    // ============================= CARGA EXCEL (FULL) ===================================
+    // =====================================================================================
+
+    /**
+     * ✅ Carga completa:
+     * - Lee TODAS las filas del Excel (sin filtros)
+     * - Única validación: existe producto por CODITEM (viene del Excel)
+     * - Si no existe -> codigosNoEncontrados + sigue
+     * - Si existe -> INSERTA (no actualiza)
+     *
+     * ✅ Campos pedidos (codPdv, pdv, marca, producto/nombreProducto, codigoSap, descripcion):
+     * - Se respetan los del Excel
+     * - SOLO si vienen vacíos: se completan desde SAP_Prod_cache
+     *
+     * Hoja: usa la primera hoja por defecto.
+     */
+    public Map<String, Object> cargarExcelFybeca(InputStream inputStream, String codCliente, String nombreArchivo) {
+        long t0 = System.nanoTime();
+
         Cliente cliente = getClienteOrThrow(codCliente);
-        return cargarDatosDeProducto(cliente, venta, codigosNoEncontrados);
+        Set<String> codigosNoEncontrados = new HashSet<>();
+        List<Map<String, Object>> incidencias = new ArrayList<>();
+
+        int filasLeidas = 0;
+        int filasInsertadas = 0;
+
+        final int BATCH = 2000;
+
+        try (Workbook wb = WorkbookFactory.create(inputStream)) {
+
+            Sheet sh = wb.getNumberOfSheets() > 0 ? wb.getSheetAt(0) : null;
+            if (sh == null) {
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("ok", false);
+                out.put("archivo", nombreArchivo);
+                out.put("codCliente", codCliente);
+                out.put("mensaje", "El archivo no tiene hojas.");
+                out.put("codigosNoEncontrados", List.of());
+                out.put("incidencias", List.of());
+                return out;
+            }
+
+            // Busca encabezado con al menos cod_item (o item)
+            Integer headerRow = findHeaderRow(sh, Set.of("cod_item"), 50);
+            if (headerRow == null) headerRow = findHeaderRow(sh, Set.of("item"), 50);
+
+            if (headerRow == null) {
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("ok", false);
+                out.put("archivo", nombreArchivo);
+                out.put("codCliente", codCliente);
+                out.put("mensaje", "No se encontró encabezado con COD_ITEM o ITEM.");
+                out.put("codigosNoEncontrados", List.of());
+                out.put("incidencias", List.of());
+                return out;
+            }
+
+            Map<String, Integer> h = buildHeaderIndex(sh, headerRow);
+
+            // columnas posibles (ajusta si tus headers se llaman distinto)
+            Integer cCodItem = pick(h, "cod_item", "item", "codigo_item", "coditem");
+
+            Integer cFecha   = pick(h, "fecha", "fecha_venta", "fecha_corte");
+            Integer cAnio    = pick(h, "anio", "ano");
+            Integer cMes     = pick(h, "mes");
+            Integer cDia     = pick(h, "dia");
+
+            Integer cCodPdv  = pick(h, "cod_pdv", "codigo_tienda", "cod_tienda", "pdv_codigo", "cod_local", "codigo_pdv");
+            Integer cPdv     = pick(h, "pdv", "tienda", "nombre_tienda", "nombre_local");
+
+            Integer cCiudad  = pick(h, "ciudad");
+
+            Integer cVentaUsd = pick(h, "venta_dolares", "venta_usd", "ventas_usd", "ventas_en_usd", "venta_en_usd");
+            Integer cVentaUds = pick(h, "venta_unidad", "venta_unidades", "unidades", "uds", "venta_uds");
+
+            Integer cStockUsd = pick(h, "stock_dolares", "stock_usd", "stock_en_usd");
+            Integer cStockUds = pick(h, "stock_unidades", "stock_unidad", "stock", "stock_uds");
+
+            Integer cMarca       = pick(h, "marca");
+            Integer cDescripcion = pick(h, "descripcion", "producto", "nombre_producto", "nombreproducto");
+            Integer cCodigoSap   = pick(h, "codigo_sap", "cod_sap", "codigo_producto_sap", "codigoprod");
+
+            for (int r = headerRow + 1; r <= sh.getLastRowNum(); r++) {
+                Row row = sh.getRow(r);
+                if (row == null) continue;
+
+                filasLeidas++;
+
+                try {
+                    String codItem = getString(row, cCodItem);
+                    if (codItem == null || codItem.isBlank()) {
+                        codigosNoEncontrados.add("CODITEM_VACIO");
+                        incidencias.add(inc("CODITEM_VACIO", "COD_ITEM vacío. Fila omitida.", r + 1));
+                        continue;
+                    }
+                    codItem = codItem.trim();
+
+                    Venta v = new Venta();
+                    v.setCliente(cliente);
+
+                    // fecha/anio/mes/dia
+                    Integer anio = (cAnio != null) ? safeInt(getString(row, cAnio)) : null;
+                    Integer mes  = (cMes != null)  ? safeInt(getString(row, cMes))  : null;
+                    Integer dia  = (cDia != null)  ? safeInt(getString(row, cDia))  : null;
+
+                    if (anio != null && mes != null && dia != null) {
+                        v.setAnio(anio);
+                        v.setMes(mes);
+                        v.setDia(dia);
+                    } else {
+                        Date d = getDate(row, cFecha);
+                        var zdt = (d != null)
+                                ? d.toInstant().atZone(ZONE)
+                                : LocalDate.now().atStartOfDay(ZONE);
+                        v.setAnio(zdt.getYear());
+                        v.setMes(zdt.getMonthValue());
+                        v.setDia(zdt.getDayOfMonth());
+                    }
+
+                    // ✅ aquí guardamos temporalmente CODITEM en codBarra para validar
+                    v.setCodBarra(codItem);
+
+                    // ✅ tienda: respeta lo del Excel
+                    String codPdvExcel = getString(row, cCodPdv);
+                    String pdvExcel = getString(row, cPdv);
+
+                    String codPdv = normalizarCodPdv(codPdvExcel);
+                    v.setCodPdv(codPdv);
+
+                    // pdv: si viene vacío, usa codPdv (igual que tu lógica vieja)
+                    v.setPdv((pdvExcel != null && !pdvExcel.trim().isEmpty()) ? pdvExcel.trim() : codPdv);
+
+                    // ✅ ciudad: NO tocar (se queda como viene / o null)
+                    v.setCiudad(getString(row, cCiudad));
+
+                    // valores
+                    v.setVentaDolares(opt0(getDouble(row, cVentaUsd)));
+                    v.setVentaUnidad(opt0(getDouble(row, cVentaUds)));
+                    v.setStockDolares(opt0(getDouble(row, cStockUsd)));
+                    v.setStockUnidades(opt0(getDouble(row, cStockUds)));
+
+                    // ✅ campos de negocio (respeta Excel primero)
+                    String marcaExcel = getString(row, cMarca);
+                    String descExcel = getString(row, cDescripcion);
+                    String codigoSapExcel = getString(row, cCodigoSap);
+
+                    if (marcaExcel != null && !marcaExcel.trim().isEmpty()) v.setMarca(marcaExcel.trim());
+                    if (descExcel != null && !descExcel.trim().isEmpty()) {
+                        v.setDescripcion(descExcel.trim());
+                        v.setNombreProducto(descExcel.trim());
+                    }
+                    if (codigoSapExcel != null && !codigoSapExcel.trim().isEmpty()) v.setCodigoSap(codigoSapExcel.trim());
+
+                    // ✅ ÚNICA VALIDACIÓN: existe producto por codItem
+                    boolean okProd = cargarProductoPorCodItem(cliente, v, codigosNoEncontrados);
+                    if (!okProd) {
+                        incidencias.add(inc(codItem, "No existe PRODUCTO por codItem. Fila omitida.", r + 1));
+                        continue;
+                    }
+
+                    // ✅ AHORA que ya tengo el producto, GUARDO codBarra REAL (no el codItem)
+                    if (v.getProducto() != null && v.getProducto().getCodBarraSap() != null
+                            && !v.getProducto().getCodBarraSap().trim().isEmpty()) {
+                        v.setCodBarra(v.getProducto().getCodBarraSap().trim());
+                    } else {
+                        // fallback: si producto no trae codBarraSap, dejo el codItem para no perder la fila
+                        v.setCodBarra(codItem);
+                    }
+
+                    // ✅ completar SOLO si faltan campos (sin pisar lo del Excel)
+                    enriquecerDesdeSapCacheSiFalta(v);
+
+                    // ✅ INSERT ONLY
+                    ventaRepository.save(v);
+                    filasInsertadas++;
+
+                    if (filasInsertadas % BATCH == 0) {
+                        ventaRepository.flush();
+                        entityManager.clear();
+                    }
+
+                } catch (Exception exFila) {
+                    incidencias.add(inc("ERROR_FILA", "Error fila: " + exFila.getMessage(), r + 1));
+                }
+            }
+
+            ventaRepository.flush();
+            entityManager.clear();
+
+        } catch (Exception e) {
+            incidencias.add(inc("ERROR_FATAL", "Error fatal: " + e.getMessage(), -1));
+        }
+
+        long t1 = System.nanoTime();
+        double segundos = (t1 - t0) / 1_000_000_000.0;
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("archivo", nombreArchivo);
+        out.put("codCliente", codCliente);
+        out.put("filasLeidas", filasLeidas);
+        out.put("filasInsertadas", filasInsertadas);
+        out.put("codigosNoEncontrados", codigosNoEncontrados.stream().sorted().collect(Collectors.toList()));
+        out.put("incidencias", incidencias);
+        out.put("tiempoSegundos", segundos);
+        return out;
     }
 
-    // ====== Archivo de incidencias (códigos no encontrados) ======
-
-    private void guardarCodigoNoEncontradoLocal(String cod) {
-        try (BufferedWriter w = Files.newBufferedWriter(
-                Paths.get(CARPETA_CODIGOS, "codigos_no_encontrados.txt"),
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-            w.write(cod);
-            w.newLine();
-        } catch (IOException ignored) {}
+    public Map<String, Object> cargarExcelFybeca(InputStream inputStream, String nombreArchivo) {
+        return cargarExcelFybeca(inputStream, DEFAULT_COD_CLIENTE, nombreArchivo);
     }
+
+    private static Map<String, Object> inc(String codigo, String motivo, int fila) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("codigo", codigo);
+        m.put("motivo", motivo);
+        m.put("fila", fila);
+        return m;
+    }
+
+    private static Integer safeInt(String s) {
+        if (s == null) return null;
+        String x = s.trim();
+        if (x.isBlank()) return null;
+        try { return Integer.parseInt(x); } catch (Exception e) { return null; }
+    }
+
+    private static double opt0(Double d) {
+        return d == null ? 0 : d;
+    }
+
+    // =====================================================================================
+    // ======================== Archivo de no encontrados (TXT) ============================
+    // =====================================================================================
 
     public ResponseEntity<Resource> obtenerArchivoCodigosNoEncontrados(List<String> codigosNoEncontrados) {
         List<String> depurados = (codigosNoEncontrados == null ? List.<String>of() : codigosNoEncontrados).stream()
@@ -366,7 +758,6 @@ public class FybecaVentaService {
 
     // ====== Catálogos ======
 
-    /** Genérico: marcas por codCliente */
     public List<String> obtenerMarcasDisponibles(String codCliente) {
         String jpql = "SELECT DISTINCT v.marca FROM Venta v WHERE v.marca IS NOT NULL AND v.cliente.codCliente = :cod";
         return entityManager.createQuery(jpql, String.class)
@@ -374,12 +765,10 @@ public class FybecaVentaService {
                 .getResultList();
     }
 
-    /** Wrapper: default (MZCL-000014) */
     public List<String> obtenerMarcasDisponiblesFybeca() {
         return obtenerMarcasDisponibles(DEFAULT_COD_CLIENTE);
     }
 
-    /** Genérico: años por codCliente */
     public List<Integer> obtenerAniosDisponibles(String codCliente) {
         String jpql = "SELECT DISTINCT v.anio FROM Venta v WHERE v.cliente.codCliente = :cod ORDER BY v.anio DESC";
         return entityManager.createQuery(jpql, Integer.class)
@@ -387,12 +776,10 @@ public class FybecaVentaService {
                 .getResultList();
     }
 
-    /** Wrapper: default (MZCL-000014) */
     public List<Integer> obtenerAniosDisponiblesFybeca() {
         return obtenerAniosDisponibles(DEFAULT_COD_CLIENTE);
     }
 
-    /** Genérico: meses por codCliente (y opcional año) */
     public List<Integer> obtenerMesesDisponibles(String codCliente, Integer anio) {
         if (anio == null) {
             String jpql = "SELECT DISTINCT v.mes FROM Venta v WHERE v.cliente.codCliente = :cod ORDER BY v.mes";
@@ -407,14 +794,12 @@ public class FybecaVentaService {
                 .getResultList();
     }
 
-    /** Wrapper: default (MZCL-000014) */
     public List<Integer> obtenerMesesDisponiblesFybeca(Integer anio) {
         return obtenerMesesDisponibles(DEFAULT_COD_CLIENTE, anio);
     }
 
     // ====== Reporte (opcional) ======
 
-    /** Genérico: reporte crudo por codCliente */
     public List<Object[]> obtenerReporteVentasCrudo(String codCliente) {
         String sql = """
             WITH VentasMensuales AS (
@@ -446,12 +831,12 @@ public class FybecaVentaService {
         """;
         Query q = entityManager.createNativeQuery(sql);
         q.setParameter("codCliente", codCliente);
+
         @SuppressWarnings("unchecked")
         List<Object[]> res = q.getResultList();
         return res;
     }
 
-    /** Wrapper: default (MZCL-000014) */
     public List<Object[]> obtenerReporteVentasFybecaCrudo() {
         return obtenerReporteVentasCrudo(DEFAULT_COD_CLIENTE);
     }
