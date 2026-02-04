@@ -15,6 +15,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -403,6 +404,20 @@ public class TemplateGeneralController {
             return error(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo generar el reporte de ventas.",
                     e.getMessage(), req.getRequestURI(), cid);
         }
+    }
+
+    @GetMapping("/reporte-ventas-zip")
+    public ResponseEntity<StreamingResponseBody> generarReporteVentasZip(
+            @RequestParam(value = "anio", required = false) Integer anio,
+            @RequestParam(value = "mes", required = false) Integer mes,
+            @RequestParam(value = "marca", required = false) String marca
+    ) {
+        String filename = "template_general_ventas_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
+        StreamingResponseBody body = outputStream -> ventaService.escribirReporteVentasZip(outputStream, anio, mes, marca);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(body);
     }
 
     // ===================== Helpers =====================

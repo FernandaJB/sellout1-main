@@ -990,12 +990,12 @@ const TemplateGeneral = () => {
 
   const downloadVentasReport = async () => {
     try {
-      const { blob, filename } = await apiFetch("/reporte-ventas", { expect: "blob" });
+      const { blob, filename } = await apiFetch("/reporte-ventas-zip", { expect: "blob" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = filename || "reporte_ventas_template_general.xlsx";
+      link.download = filename || "template_general_ventas.zip";
       link.click();
-      showInfo("Reporte general descargándose en segundo plano.");
+      showInfo("Reporte ZIP descargándose en segundo plano.");
     } catch (e) {
       showError(String(e));
     }
@@ -1154,8 +1154,8 @@ const TemplateGeneral = () => {
                     onClick={() => (window.location.href = "/TEMPLATE PLANTILLA FIJA.xlsx")}
                   />
                   <Button
-                    label="Reporte Ventas"
-                    icon="pi pi-file-excel"
+                    label="Reporte Ventas (ZIP)"
+                    icon="pi pi-file"
                     className="p-button-success"
                     onClick={downloadVentasReport}
                     disabled={loadingVentas}

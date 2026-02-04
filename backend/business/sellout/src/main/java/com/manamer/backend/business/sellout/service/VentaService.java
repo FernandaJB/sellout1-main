@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,6 +33,8 @@ import java.util.stream.Collectors;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -69,6 +72,13 @@ public class VentaService {
     public VentaService(VentaRepository ventaRepository, EntityManager entityManager) {
         this.ventaRepository = ventaRepository;
         this.entityManager = entityManager;
+    }
+
+    private static String csvEsc(Object v) {
+        String s = Objects.toString(v, "");
+        boolean needQuote = s.contains(",") || s.contains("\n") || s.contains("\r") || s.contains("\"");
+        if (s.contains("\"")) s = s.replace("\"", "\"\"");
+        return needQuote ? ("\"" + s + "\"") : s;
     }
 
     // ============================================================
@@ -188,6 +198,84 @@ public class VentaService {
         if (!list.isEmpty()) {
             ventaRepository.flush();
             entityManager.clear();
+        }
+    }
+
+    public void escribirReporteVentasZip(OutputStream os, Integer anio, Integer mes, String marca) throws IOException {
+        try (ZipOutputStream zos = new ZipOutputStream(os)) {
+            zos.putNextEntry(new ZipEntry("template_general_ventas.csv"));
+            try (BufferedWriter bw = new BufferedWriter(new java.io.OutputStreamWriter(zos, StandardCharsets.UTF_8))) {
+                bw.write('\ufeff');
+                bw.write("Año,Mes,Día,Marca,Código Cliente,Nombre Cliente,Código PDV,PDV,Ciudad,Producto,Código Barra,Stock ($),Stock (U),Venta ($),Venta (U)");
+                bw.newLine();
+                int offset = 0;
+                final int PAGE_SIZE = 10000;
+                List<Map<String, Object>> page;
+                do {
+                    page = obtenerVentasResumen(null, anio, mes, marca, PAGE_SIZE, offset);
+                    for (Map<String, Object> row : page) {
+                        bw.write(
+                            csvEsc(row.getOrDefault("anio", "")) + "," +
+                            csvEsc(row.getOrDefault("mes", "")) + "," +
+                            csvEsc(row.getOrDefault("dia", "")) + "," +
+                            csvEsc(row.getOrDefault("marca", "")) + "," +
+                            csvEsc(row.getOrDefault("codCliente", "")) + "," +
+                            csvEsc(row.getOrDefault("nombreCliente", "")) + "," +
+                            csvEsc(row.getOrDefault("codPdv", "")) + "," +
+                            csvEsc(row.getOrDefault("pdv", "")) + "," +
+                            csvEsc(row.getOrDefault("ciudad", "")) + "," +
+                            csvEsc(row.getOrDefault("nombreProducto", "")) + "," +
+                            csvEsc(row.getOrDefault("codBarra", "")) + "," +
+                            csvEsc(row.getOrDefault("stockDolares", "0")) + "," +
+                            csvEsc(row.getOrDefault("stockUnidades", "0")) + "," +
+                            csvEsc(row.getOrDefault("ventaDolares", "0")) + "," +
+                            csvEsc(row.getOrDefault("ventaUnidad", "0"))
+                        );
+                        bw.newLine();
+                    }
+                    offset += PAGE_SIZE;
+                } while (!page.isEmpty());
+            }
+            zos.closeEntry();
+        }
+    }
+
+    public void escribirReporteVentasZip(OutputStream os, String codCliente, Integer anio, Integer mes, String marca) throws IOException {
+        try (ZipOutputStream zos = new ZipOutputStream(os)) {
+            zos.putNextEntry(new ZipEntry("ventas.csv"));
+            try (BufferedWriter bw = new BufferedWriter(new java.io.OutputStreamWriter(zos, StandardCharsets.UTF_8))) {
+                bw.write('\ufeff');
+                bw.write("Año,Mes,Día,Marca,Código Cliente,Nombre Cliente,Código PDV,PDV,Ciudad,Producto,Código Barra,Stock ($),Stock (U),Venta ($),Venta (U)");
+                bw.newLine();
+                int offset = 0;
+                final int PAGE_SIZE = 10000;
+                List<Map<String, Object>> page;
+                do {
+                    page = obtenerVentasResumen(codCliente, anio, mes, marca, PAGE_SIZE, offset);
+                    for (Map<String, Object> row : page) {
+                        bw.write(
+                            csvEsc(row.getOrDefault("anio", "")) + "," +
+                            csvEsc(row.getOrDefault("mes", "")) + "," +
+                            csvEsc(row.getOrDefault("dia", "")) + "," +
+                            csvEsc(row.getOrDefault("marca", "")) + "," +
+                            csvEsc(row.getOrDefault("codCliente", "")) + "," +
+                            csvEsc(row.getOrDefault("nombreCliente", "")) + "," +
+                            csvEsc(row.getOrDefault("codPdv", "")) + "," +
+                            csvEsc(row.getOrDefault("pdv", "")) + "," +
+                            csvEsc(row.getOrDefault("ciudad", "")) + "," +
+                            csvEsc(row.getOrDefault("nombreProducto", "")) + "," +
+                            csvEsc(row.getOrDefault("codBarra", "")) + "," +
+                            csvEsc(row.getOrDefault("stockDolares", "0")) + "," +
+                            csvEsc(row.getOrDefault("stockUnidades", "0")) + "," +
+                            csvEsc(row.getOrDefault("ventaDolares", "0")) + "," +
+                            csvEsc(row.getOrDefault("ventaUnidad", "0"))
+                        );
+                        bw.newLine();
+                    }
+                    offset += PAGE_SIZE;
+                } while (!page.isEmpty());
+            }
+            zos.closeEntry();
         }
     }
 
