@@ -25,6 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.io.IOException;
@@ -420,5 +421,21 @@ public class DepratiController {
                 .contentType(org.springframework.http.MediaType.TEXT_PLAIN)
                 .contentLength(bytes.length)
                 .body(resource);
+    }
+
+    @GetMapping("/reporte-ventas-zip")
+    public ResponseEntity<StreamingResponseBody> generarReporteVentasZip(
+            @RequestParam(value = "codCliente", required = false) String codCliente,
+            @RequestParam(value = "anio", required = false) Integer anio,
+            @RequestParam(value = "mes", required = false) Integer mes,
+            @RequestParam(value = "marca", required = false) String marca
+    ) {
+        String cod = resolveCodCliente(codCliente);
+        String filename = "deprati_ventas_" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
+        StreamingResponseBody body = outputStream -> ventaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+                .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                .body(body);
     }
 }
