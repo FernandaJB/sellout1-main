@@ -34,10 +34,13 @@ const getFilenameFromCD = (cd) => {
   return null;
 };
 
+// ✅ CAMBIO: soporte timeout opcional. Si timeoutMs es null/0 -> NO se aplica timeout.
 async function apiFetch(
   path,
   { method = "GET", headers = {}, body, expect = "json", timeoutMs = 300000 } = {}
 ) {
+  const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: {
@@ -45,7 +48,7 @@ async function apiFetch(
       ...headers,
     },
     body,
-    signal: AbortSignal.timeout(timeoutMs),
+    signal,
   });
 
   if (!res.ok) {
@@ -70,21 +73,21 @@ async function apiFetch(
     const blob = await res.blob();
     const filename = getFilenameFromCD(res.headers.get("Content-Disposition"));
     const contentType = res.headers.get("Content-Type") || "";
-    return { blob, filename, contentType };
+    return { blob, filename, contentType, headers: res.headers };
   }
 
   if (expect === "text") {
     const text = await res.text();
-    return { text };
+    return { text, headers: res.headers };
   }
 
   const ct = res.headers.get("Content-Type") || "";
   if (ct.includes("application/json")) {
     const data = await res.json();
-    return { data };
+    return { data, headers: res.headers };
   }
   const textFallback = await res.text();
-  return { data: textFallback };
+  return { data: textFallback, headers: res.headers };
 }
 
 // ================= Utilidades de mes =================
@@ -128,6 +131,10 @@ const extractCounts = (result) => {
       const v = obj?.[k];
       if (typeof v === "number" && Number.isFinite(v)) return v;
       if (typeof v === "string" && v.trim() && !isNaN(Number(v))) return Number(v);
+      if (typeof v === "object" && v && (v.value ?? v.val ?? v.count) != null) {
+        const vv = Number(v.value ?? v.val ?? v.count);
+        if (Number.isFinite(vv)) return vv;
+      }
     }
     return def;
   };
@@ -387,24 +394,26 @@ const Fybeca = () => {
     }
   };
 
-  const loadVentasAll = async () => {
+  const loadVentasPage = async () => {
     setLoadingVentas(true);
     try {
-      const batch = 5000;
-      let offset = 0;
-      let all = [];
-      while (true) {
-        const qs = new URLSearchParams({ codCliente: COD_CLIENTE_FIJO, limit: String(batch), offset: String(offset) });
-        const { data } = await apiFetch(`/venta?${qs.toString()}`);
-        const chunk = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
-        all = all.concat(chunk);
-        if (chunk.length < batch) break;
-        offset += batch;
-      }
-      all._fromApi = true;
-      setVentas(all);
-      setVentasBase(all);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: all.length }));
+      // Cargar todos los datos sin paginación para paginación del lado del cliente
+      const qs = new URLSearchParams({
+        codCliente: COD_CLIENTE_FIJO,
+        limit: "100000", // Alto límite para traer todos los datos
+      });
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
+      const list = (Array.isArray(data) ? data : []).map((v) =>
+        v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v
+      );
+      list._fromApi = true;
+      setVentas(list);
+      setVentasBase(list);
+      setPaginatorState((p) => ({
+        ...p,
+        page: 0,
+        totalRecords: list.length,
+      }));
       setShowAll(true);
       setFullDataLoaded(true);
     } catch {
@@ -477,16 +486,18 @@ const Fybeca = () => {
     setLoadingVentas(true);
     try {
       const qs = new URLSearchParams(buildQuery(f));
-      // si NO cargaste fullData, soporta paginación
-      if (!fullDataLoaded) {
-        qs.set("limit", String(paginatorState.rows || 50));
-        qs.set("offset", String(paginatorState.first || 0));
-      }
+      // Traer todos los datos para paginación del lado del cliente
+      qs.set("limit", "100000");
       const { data } = await apiFetch(`/venta?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
+      setPaginatorState((prev) => ({
+        ...prev,
+        first: 0,
+        page: 0,
+        totalRecords: list.length,
+      }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
     } catch {
       const filtered = filterLocalData(ventasBase, f);
@@ -503,7 +514,7 @@ const Fybeca = () => {
   // ===== efectos =====
   useEffect(() => {
     loadMarcas();
-    loadVentasAll();
+    loadVentasPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -534,13 +545,14 @@ const Fybeca = () => {
     };
   }, [loadingTemplate]);
 
-  // ===== paginación =====
-  const onPageChange = async (e) => {
-    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }));
-    if (fullDataLoaded) return; // ya está todo cargado
+  // Resetear paginación cuando cambian los filtros
+  useEffect(() => {
+    setPaginatorState((prev) => ({ ...prev, first: 0, page: 0 }));
+  }, [appliedFilters, globalFilter]);
 
-    // si no está full cargado, podrías implementar paginado real acá.
-    // Por simplicidad, con loadVentasAll ya lo tienes.
+  // ===== paginación =====
+  const onPageChange = (e) => {
+    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows, page: e.page }));
   };
 
   // ===== Filtros + búsqueda global =====
@@ -699,7 +711,7 @@ const Fybeca = () => {
       }
 
       // recargar tabla
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasPage());
 
       // construir incidencias + log detallado para toolbar (igual TemplateGeneral)
       const procesadas = counts.total || (typeof counts.filasLeidas === "number" ? counts.filasLeidas : 0);
@@ -815,7 +827,7 @@ const Fybeca = () => {
         try {
           await apiFetch(`/venta/${id}`, { method: "DELETE" });
           showSuccess("Venta eliminada correctamente");
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasPage());
         } catch (e) {
           showError(String(e));
         }
@@ -845,7 +857,7 @@ const Fybeca = () => {
           });
           showSuccess("Ventas eliminadas correctamente");
           setSelectedVentas([]);
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasPage());
         } catch {
           showError("Error al eliminar las ventas");
         }
@@ -853,6 +865,7 @@ const Fybeca = () => {
     });
   };
 
+  // ✅ CAMBIO: descarga ZIP sin timeout (o puedes poner 30min). Aquí lo dejo SIN timeout.
   const downloadVentasReport = async () => {
     try {
       const qs = new URLSearchParams();
@@ -860,7 +873,12 @@ const Fybeca = () => {
       if (Number.isFinite(appliedFilters.year)) qs.append("anio", appliedFilters.year);
       if (Number.isFinite(appliedFilters.month)) qs.append("mes", appliedFilters.month);
       if (appliedFilters.marca) qs.append("marca", appliedFilters.marca);
-      const { blob, filename } = await apiFetch(`/reporte-ventas-zip?${qs.toString()}`, { expect: "blob" });
+
+      const { blob, filename } = await apiFetch(`/reporte-ventas-zip?${qs.toString()}`, {
+        expect: "blob",
+        timeoutMs: null, // <- SIN timeout para evitar cortar ZIP grandes
+      });
+
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = filename || "fybeca_ventas.zip";
@@ -911,7 +929,7 @@ const Fybeca = () => {
   };
 
   // ===== UI filtros =====
-  const handleApplyFilters = async () => {
+  const handleApplyFilters = () => {
     if (filterMonth !== null && filterMonth !== "" && (filterYear === null || filterYear === "")) {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");
       return;
@@ -925,10 +943,10 @@ const Fybeca = () => {
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     setShowAll(false);
-    await fetchVentasWithFilters(newApplied);
+    showSuccess("Filtros aplicados correctamente.");
   };
 
-  const handleClearFilters = async () => {
+  const handleClearFilters = () => {
     setFilterYear(null);
     setFilterMonth(null);
     setFilterMarca("");
@@ -937,7 +955,6 @@ const Fybeca = () => {
     setMonthsOptions([]);
     setAppliedFilters({ year: null, month: null, marca: "", dateFrom: null, dateTo: null });
     setShowAll(true);
-    await loadVentasAll();
     showInfo("Filtros limpiados correctamente.");
   };
 
@@ -959,7 +976,7 @@ const Fybeca = () => {
       await actualizarVenta(editVenta);
       showSuccess("Venta actualizada correctamente");
       setEditVenta(null);
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasAll());
+      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentasPage());
     } catch (err) {
       showError(String(err));
     } finally {
@@ -1249,7 +1266,6 @@ const Fybeca = () => {
             paginator
             rows={paginatorState.rows}
             rowsPerPageOptions={[50, 100, 150, 200]}
-            totalRecords={paginatorState.totalRecords}
             first={paginatorState.first}
             onPage={onPageChange}
             paginatorClassName="p-3 deprati-square-paginator"

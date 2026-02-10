@@ -1229,7 +1229,7 @@ button.p-button-warning:hover, .btn-warning:hover {
   max-height: 70vh;
   overflow-y: auto;
 }
-* Estilos para el modal de edición */
+/* Estilos para el modal de edición */
 .modal {
   position: fixed;
   top: 0;

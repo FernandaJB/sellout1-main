@@ -5,6 +5,7 @@ import com.manamer.backend.business.sellout.models.ExcelUtils;
 import com.manamer.backend.business.sellout.models.Producto;
 import com.manamer.backend.business.sellout.models.TipoMueble;
 import com.manamer.backend.business.sellout.models.Venta;
+import com.manamer.backend.business.sellout.repositories.VentaRepository;
 import com.manamer.backend.business.sellout.service.ClienteService;
 import com.manamer.backend.business.sellout.service.FybecaVentaService;
 import com.manamer.backend.business.sellout.service.ProductoService;
@@ -13,26 +14,24 @@ import com.manamer.backend.business.sellout.service.TipoMuebleService;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 import java.io.InputStream;
-import java.text.Normalizer;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
@@ -48,16 +47,19 @@ public class FybecaController {
     private final TipoMuebleService tipoMuebleService;
     private final ClienteService clienteService;
     private final ProductoService productoService;
+    private final VentaRepository ventaRepository;
 
     @Autowired
     public FybecaController(FybecaVentaService fybecaService,
                             TipoMuebleService tipoMuebleService,
                             ClienteService clienteService,
-                            ProductoService productoService) {
+                            ProductoService productoService,
+                            VentaRepository ventaRepository) {
         this.fybecaService = fybecaService;
         this.tipoMuebleService = tipoMuebleService;
         this.clienteService = clienteService;
         this.productoService = productoService;
+        this.ventaRepository = ventaRepository;
     }
 
     // ---------- Helpers ----------
@@ -74,16 +76,7 @@ public class FybecaController {
         return parts;
     }
 
-    public static String normalizarTexto(String input) {
-        if (input == null) return null;
-        return Normalizer.normalize(input.toLowerCase().trim(), Normalizer.Form.NFD)
-                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
-                .replaceAll("[^\\p{ASCII}]", "")
-                .replaceAll("[\\.,\"']", "");
-    }
-
     // ---------- Ventas ----------
-
     @GetMapping("/venta")
     public ResponseEntity<?> obtenerVentasRapidas(
             @RequestParam(required = false) String codCliente,
@@ -102,45 +95,88 @@ public class FybecaController {
     public ResponseEntity<Venta> obtenerVentaPorId(@PathVariable Long id,
                                                    @RequestParam(required = false) String codCliente) {
         String cod = resolveCodCliente(codCliente);
-        return fybecaService.obtenerVentaPorIdYCodCliente(id, cod)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+
+        Optional<Venta> opt = ventaRepository.findById(id);
+        if (opt.isEmpty()) return ResponseEntity.notFound().build();
+
+        Venta v = opt.get();
+        if (v.getCliente() == null || v.getCliente().getCodCliente() == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+
+        if (!cod.equalsIgnoreCase(v.getCliente().getCodCliente().trim())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        return ResponseEntity.ok(v);
     }
 
     @DeleteMapping("/venta/{id}")
-    public ResponseEntity<Void> eliminarVenta(@PathVariable Long id) {
+    public ResponseEntity<Void> eliminarVenta(@PathVariable Long id,
+                                              @RequestParam(required = false) String codCliente) {
+        String cod = resolveCodCliente(codCliente);
+
         try {
-            fybecaService.eliminarVenta(id);
+            Optional<Venta> opt = ventaRepository.findById(id);
+            if (opt.isEmpty()) return ResponseEntity.notFound().build();
+
+            Venta v = opt.get();
+            if (v.getCliente() == null || v.getCliente().getCodCliente() == null) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
+
+            if (!cod.equalsIgnoreCase(v.getCliente().getCodCliente().trim())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+
+            ventaRepository.delete(v);
             return ResponseEntity.noContent().build();
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            logger.error("Error eliminando venta id={}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
     // >>> Borrado masivo en lotes <<<
     @DeleteMapping("/ventas-forma-masiva")
-    public ResponseEntity<Void> eliminarVentas(@RequestBody List<Long> ids) {
+    public ResponseEntity<Void> eliminarVentas(@RequestBody List<Long> ids,
+                                               @RequestParam(required = false) String codCliente) {
+        String cod = resolveCodCliente(codCliente);
+
         if (ids == null || ids.isEmpty()) return ResponseEntity.ok().build();
+
         int fallidos = 0;
+
         for (List<Long> batch : partition(ids, DELETE_BATCH_SIZE)) {
             try {
-                boolean ok = fybecaService.eliminarVentas(batch);
-                if (!ok) fallidos++;
+                List<Venta> ventas = ventaRepository.findAllById(batch);
+
+                // borrar SOLO las del cliente solicitado
+                List<Venta> aBorrar = new ArrayList<>();
+                for (Venta v : ventas) {
+                    if (v.getCliente() != null
+                            && v.getCliente().getCodCliente() != null
+                            && cod.equalsIgnoreCase(v.getCliente().getCodCliente().trim())) {
+                        aBorrar.add(v);
+                    }
+                }
+
+                if (!aBorrar.isEmpty()) {
+                    ventaRepository.deleteAllInBatch(aBorrar);
+                }
             } catch (Exception e) {
                 logger.error("Error eliminando lote de ventas (tam={}): {}", batch.size(), e.getMessage(), e);
                 fallidos++;
             }
         }
-        return (fallidos == 0) ? ResponseEntity.ok().build()
+
+        return (fallidos == 0)
+                ? ResponseEntity.ok().build()
                 : ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
     }
 
     /**
-     * ✅ NUEVO (CORRECTO):
-     * Subida de ventas usando el FybecaVentaService "INSERT ONLY".
-     *
-     * - No parsea el Excel aquí (toda la lógica está en el service)
-     * - Devuelve resultado con filas leídas, insertadas y codigos no encontrados.
+     * Subida de ventas usando el FybecaVentaService (INSERT ONLY).
      */
     @PostMapping("/subir-archivo-venta")
     public ResponseEntity<Map<String, Object>> subirArchivoVenta(@RequestParam("file") MultipartFile file,
@@ -155,7 +191,6 @@ public class FybecaController {
         }
 
         try {
-            // Validar que exista cliente
             var clienteOpt = clienteService.findByCodCliente(cod);
             if (clienteOpt.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
@@ -171,7 +206,6 @@ public class FybecaController {
                 List<String> cods = (List<String>) resultado.getOrDefault("codigosNoEncontrados", List.of());
 
                 resultado.put("tieneNoEncontrados", cods != null && !cods.isEmpty());
-
                 return ResponseEntity.ok(resultado);
             }
         } catch (Exception e) {
@@ -184,9 +218,7 @@ public class FybecaController {
     }
 
     /**
-     * ✅ NUEVO:
-     * Endpoint para descargar TXT de no encontrados.
-     * El frontend le manda la lista y este endpoint devuelve el archivo .txt
+     * Descargar TXT de no encontrados.
      */
     @PostMapping("/codigos-no-encontrados/txt")
     public ResponseEntity<Resource> descargarCodigosNoEncontradosTxt(@RequestBody List<String> codigosNoEncontrados) {
@@ -367,7 +399,6 @@ public class FybecaController {
             for (Venta venta : ventas) {
                 Row row = sheet.createRow(rowNum++);
 
-                // Si anio/mes son Integer (wrapper) puedes usar esto:
                 row.createCell(0).setCellValue(venta.getAnio() != null ? venta.getAnio() : 0);
                 row.createCell(1).setCellValue(venta.getMes() != null ? venta.getMes() : 0);
 
@@ -397,12 +428,11 @@ public class FybecaController {
                 row.createCell(9).setCellValue(venta.getCodPdv() != null ? venta.getCodPdv() : "");
                 row.createCell(11).setCellValue(venta.getPdv() != null ? venta.getPdv() : "");
 
-                // Si estos getters devuelven double primitivo: perfecto así.
                 row.createCell(12).setCellValue(venta.getStockDolares());
                 row.createCell(13).setCellValue(venta.getStockUnidades());
                 row.createCell(14).setCellValue(venta.getVentaDolares());
                 row.createCell(15).setCellValue(venta.getVentaUnidad());
-            } // ✅ CIERRE DEL FOR (esto faltaba)
+            }
 
             byte[] byteArray = ExcelUtils.convertWorkbookToByteArray(workbook);
             workbook.close();
@@ -427,7 +457,10 @@ public class FybecaController {
     ) {
         String cod = resolveCodCliente(codCliente);
         String filename = "fybeca_ventas_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
-        StreamingResponseBody body = outputStream -> fybecaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+
+        StreamingResponseBody body = outputStream ->
+                fybecaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)

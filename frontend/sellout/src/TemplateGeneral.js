@@ -546,9 +546,19 @@ const TemplateGeneral = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const list = await fetchAllVentas({ basePath: "/venta", query: {}, timeoutMs: 120000 });
+      const qs = new URLSearchParams({
+        limit: "100000",
+      });
+      const { data } = await apiFetch(`/venta?${qs.toString()}`);
+      const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
       setVentas(list);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: list.length }));
+      setPaginatorState((p) => ({
+        ...p,
+        first: 0,
+        page: 0,
+        totalRecords: list.length,
+      }));
     } catch (e) {
       console.error(e);
       showError("Error al cargar ventas (todas).");
@@ -681,24 +691,31 @@ const TemplateGeneral = () => {
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
-      const query = {};
-      if (f.year !== null) query.anio = f.year;
-      if (f.month !== null) query.mes = f.month;
-      if (f.marca) query.marca = f.marca;
-      if (f.cliente) query.codCliente = f.cliente;
-
+      const params = new URLSearchParams();
+      if (f.year !== null) params.set("anio", String(f.year));
+      if (f.month !== null) params.set("mes", String(f.month));
+      if (f.marca) params.set("marca", f.marca);
+      if (f.cliente) params.set("codCliente", String(f.cliente));
       if (f.dateFrom) {
         const d = new Date(f.dateFrom);
-        query.fechaDesde = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        params.set("fechaDesde", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
       }
       if (f.dateTo) {
         const d = new Date(f.dateTo);
-        query.fechaHasta = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        params.set("fechaHasta", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
       }
+      params.set("limit", "100000");
 
-      const list = await fetchAllVentas({ basePath: "/venta", query, timeoutMs: 120000 });
+      const { data } = await apiFetch(`/venta?${params.toString()}`);
+      const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
       setVentas(list);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: list.length }));
+      setPaginatorState((prev) => ({
+        ...prev,
+        first: 0,
+        page: 0,
+        totalRecords: list.length,
+      }));
       showSuccess(`Se encontraron ${list.length} registros con los filtros aplicados.`);
     } catch (e) {
       console.error(e);
@@ -729,8 +746,8 @@ const TemplateGeneral = () => {
     setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
   }, [appliedFilters, globalFilter]);
 
-  const onPageChange = async (e) => {
-    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows }));
+  const onPageChange = (e) => {
+    setPaginatorState((p) => ({ ...p, first: e.first, rows: e.rows, page: e.page }));
   };
 
   // OJO: este DataTable usa filteredData, que sale de "ventas" + globalFilter
@@ -1289,7 +1306,6 @@ const TemplateGeneral = () => {
               rowsPerPageOptions={[50, 100, 150, 200]}
               first={paginatorState.first}
               onPage={onPageChange}
-              totalRecords={filteredData.length}
               paginatorClassName="p-3 deprati-square-paginator"
               paginatorTemplate="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
               currentPageReportTemplate={`Mostrando {first} a {last} de {totalRecords} registros`}

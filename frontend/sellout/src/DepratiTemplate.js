@@ -100,8 +100,8 @@ const Deprati = () => {
     }));
   }, [filteredVentas]);
 
-  const onPageChange = async (event) => {
-    setPaginatorState((prev) => ({ ...prev, first: event.first, rows: event.rows }));
+  const onPageChange = (event) => {
+    setPaginatorState((prev) => ({ ...prev, first: event.first, rows: event.rows, page: event.page }));
   };
 
   // Años/meses
@@ -170,26 +170,22 @@ const Deprati = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const batch = 5000;
-      let offset = 0;
-      let all = [];
-      while (true) {
-        const qs = new URLSearchParams({ limit: String(batch), offset: String(offset) });
-        const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(300000) });
-        if (!res.ok) throw new Error("Error al cargar ventas");
-        const data = await res.json();
-        const chunk = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
-        all = all.concat(chunk);
-        if (chunk.length < batch) break;
-        offset += batch;
-      }
-      all._fromApi = true;
-      setVentas(all);
-
-      // por tu lógica actual: al cargar, dejas filtered = all
-      setFilteredVentas(all);
-
-      setPaginatorState((prev) => ({ ...prev, first: 0, rows: prev.rows || 50, page: 0, totalRecords: all.length }));
+      // Cargar todos los datos sin paginación para paginación del lado del cliente
+      const qs = new URLSearchParams({
+        limit: "100000", // Alto límite para traer todos los datos
+      });
+      const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(300000) });
+      if (!res.ok) throw new Error("Error al cargar ventas");
+      const data = await res.json();
+      const list = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+      list._fromApi = true;
+      setVentas(list);
+      setFilteredVentas(list);
+      setPaginatorState((prev) => ({
+        ...prev,
+        page: 0,
+        totalRecords: list.length,
+      }));
       setFullDataLoaded(true);
     } catch (e) {
       console.error(e);
@@ -526,31 +522,35 @@ const Deprati = () => {
     try {
       const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
       const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
+      const params = new URLSearchParams();
+      if (filterYear) params.set("anio", String(filterYear));
+      if (filterMonth) params.set("mes", String(filterMonth));
+      if (filterMarca) params.set("marca", String(filterMarca));
+      if (dateFrom) {
+        const d = new Date(dateFrom);
+        params.set("fechaDesde", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+      }
+      if (dateTo) {
+        const d = new Date(dateTo);
+        params.set("fechaHasta", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+      }
+      params.set("limit", "100000");
 
-      const filtered = ventas.filter((v) => {
-        if (filterYear && Number(v.anio) !== Number(filterYear)) return false;
-        if (filterMonth && Number(v.mes) !== Number(filterMonth)) return false;
-        if (filterMarca && (v.marca || "").toLowerCase() !== String(filterMarca).toLowerCase()) return false;
-
-        if (dateFrom || dateTo) {
-          const dItem = new Date(Number(v.anio), Number(v.mes) - 1, Number(v.dia || 1));
-          if (dateFrom) {
-            const dFrom = new Date(dateFrom);
-            const from = new Date(dFrom.getFullYear(), dFrom.getMonth(), dFrom.getDate());
-            if (dItem < from) return false;
-          }
-          if (dateTo) {
-            const dTo = new Date(dateTo);
-            const to = new Date(dTo.getFullYear(), dTo.getMonth(), dTo.getDate());
-            if (dItem > to) return false;
-          }
-        }
-        return true;
-      });
-
-      setFilteredVentas(filtered);
-      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
-      showInfo(`Se encontraron ${filtered.length} registros con los filtros aplicados`);
+      const res = await fetch(`/api-sellout/deprati/venta?${params.toString()}`, { signal: AbortSignal.timeout(300000) });
+      if (!res.ok) throw new Error("Error al aplicar filtros");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      list._fromApi = true;
+      setFilteredVentas(list);
+      setVentas(list);
+      setPaginatorState((prev) => ({
+        ...prev,
+        first: 0,
+        page: 0,
+        totalRecords: list.length,
+      }));
+      setFullDataLoaded(true);
+      showInfo(`Se encontraron ${list.length} registros con los filtros aplicados`);
     } finally {
       setLoadingVentas(false);
     }
@@ -1068,7 +1068,6 @@ const Deprati = () => {
             paginator
             rows={paginatorState.rows}
             rowsPerPageOptions={[50, 100, 150, 200]}
-            totalRecords={paginatorState.totalRecords}
             first={paginatorState.first}
             onPage={onPageChange}
             paginatorClassName="p-3 deprati-square-paginator"

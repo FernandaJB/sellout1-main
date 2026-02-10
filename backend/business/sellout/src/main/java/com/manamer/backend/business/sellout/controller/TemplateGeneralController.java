@@ -334,77 +334,28 @@ public class TemplateGeneralController {
     /**
      * Reporte Excel de ventas (general).
      */
-    @GetMapping("/reporte-ventas")
-    public ResponseEntity<?> generarReporteVentas(HttpServletRequest req) {
-        String cid = corrId();
-        try {
-            List<Venta> ventas = ventaService.obtenerTodasLasVentas();
+    /**
+ * Reporte de ventas (general).
+ * ✅ MEJORA PEDIDA: en vez de XLSX, devuelve ZIP (CSV) por streaming para no cargar todo en memoria.
+ */
+@GetMapping("/reporte-ventas")
+public ResponseEntity<StreamingResponseBody> generarReporteVentas(
+        @RequestParam(value = "anio", required = false) Integer anio,
+        @RequestParam(value = "mes", required = false) Integer mes,
+        @RequestParam(value = "marca", required = false) String marca
+) {
+    String filename = "reporte_ventas_template_general_" +
+            LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
 
-            XSSFWorkbook workbook = new XSSFWorkbook();
-            Sheet sheet = workbook.createSheet("Ventas");
+    StreamingResponseBody body = outputStream ->
+            ventaService.escribirReporteVentasZip(outputStream, anio, mes, marca);
 
-            // Encabezados
-            Row header = sheet.createRow(0);
-            header.createCell(0).setCellValue("Año");
-            header.createCell(1).setCellValue("Mes");
-            header.createCell(2).setCellValue("Día");
-            header.createCell(3).setCellValue("Marca");
-            header.createCell(4).setCellValue("Código Cliente");
-            header.createCell(5).setCellValue("Nombre Cliente");
-            header.createCell(6).setCellValue("Código Barra SAP");
-            header.createCell(7).setCellValue("Código SAP");
-            header.createCell(8).setCellValue("Código Item");
-            header.createCell(9).setCellValue("Nombre Producto");
-            header.createCell(10).setCellValue("Código PDV");
-            header.createCell(11).setCellValue("PDV");
-            header.createCell(12).setCellValue("Ciudad");
-            header.createCell(13).setCellValue("Stock en Dólares");
-            header.createCell(14).setCellValue("Stock en Unidades");
-            header.createCell(15).setCellValue("Venta en Dólares");
-            header.createCell(16).setCellValue("Venta en Unidades");
+    return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .body(body);
+}
 
-            int rowNum = 1;
-            for (Venta v : ventas) {
-                Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(v.getAnio());
-                row.createCell(1).setCellValue(v.getMes());
-                row.createCell(2).setCellValue(v.getDia());
-                row.createCell(3).setCellValue(Objects.toString(v.getMarca(), ""));
-                if (v.getCliente() != null) {
-                    row.createCell(4).setCellValue(Objects.toString(v.getCliente().getCodCliente(), ""));
-                    row.createCell(5).setCellValue(Objects.toString(v.getCliente().getNombreCliente(), ""));
-                } else {
-                    row.createCell(4).setCellValue("");
-                    row.createCell(5).setCellValue("");
-                }
-                row.createCell(6).setCellValue(Objects.toString(v.getCodBarra(), ""));
-                row.createCell(7).setCellValue(Objects.toString(v.getCodigoSap(), ""));
-                row.createCell(8).setCellValue(v.getProducto() != null ? Objects.toString(v.getProducto().getCodItem(), "") : "");
-                row.createCell(9).setCellValue(Objects.toString(v.getNombreProducto(), ""));
-                row.createCell(10).setCellValue(Objects.toString(v.getCodPdv(), ""));
-                row.createCell(11).setCellValue(Objects.toString(v.getPdv(), ""));
-                row.createCell(12).setCellValue(Objects.toString(v.getCiudad(), ""));
-                row.createCell(13).setCellValue(v.getStockDolares());
-                row.createCell(14).setCellValue(v.getStockUnidades());
-                row.createCell(15).setCellValue(v.getVentaDolares());
-                row.createCell(16).setCellValue(v.getVentaUnidad());
-            }
-
-            byte[] bytes = ExcelUtils.convertWorkbookToByteArray(workbook);
-            workbook.close();
-
-            return ResponseEntity.ok()
-                    .header("X-Correlation-Id", cid)
-                    .header(HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=reporte_ventas_template_general.xlsx")
-                    .body(bytes);
-
-        } catch (Exception e) {
-            logger.error("[{}] Error al generar reporte de ventas: {}", cid, e.getMessage(), e);
-            return error(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo generar el reporte de ventas.",
-                    e.getMessage(), req.getRequestURI(), cid);
-        }
-    }
 
     @GetMapping("/reporte-ventas-zip")
     public ResponseEntity<StreamingResponseBody> generarReporteVentasZip(
@@ -412,13 +363,18 @@ public class TemplateGeneralController {
             @RequestParam(value = "mes", required = false) Integer mes,
             @RequestParam(value = "marca", required = false) String marca
     ) {
-        String filename = "template_general_ventas_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
-        StreamingResponseBody body = outputStream -> ventaService.escribirReporteVentasZip(outputStream, anio, mes, marca);
+        String filename = "template_general_ventas_" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
+
+        StreamingResponseBody body = outputStream ->
+                ventaService.escribirReporteVentasZip(outputStream, anio, mes, marca);
+
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(body);
     }
+
 
     // ===================== Helpers =====================
 

@@ -1,23 +1,32 @@
 package com.manamer.backend.business.sellout.service;
 
-import com.google.common.net.HttpHeaders;
 import com.manamer.backend.business.sellout.models.Cliente;
 import com.manamer.backend.business.sellout.models.Producto;
 import com.manamer.backend.business.sellout.models.Venta;
 import com.manamer.backend.business.sellout.repositories.VentaRepository;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
+
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.rowset.SqlRowSet;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.time.LocalDate;
@@ -26,6 +35,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import org.springframework.http.HttpHeaders;
 
 @Service
 public class FybecaVentaService {
@@ -37,15 +50,27 @@ public class FybecaVentaService {
     // placeholder para evitar mezclar tiendas vacías/null
     private static final String PDV_PLACEHOLDER = "SIN_TIENDA";
 
+    // ✅ ZIP+CSV: parte el CSV en múltiples archivos dentro del ZIP
+    private static final int MAX_FILAS_POR_CSV = 250_000;
+
     private final VentaRepository ventaRepository;
     private final EntityManager entityManager;
     private final ClienteService clienteService;
 
+    // ✅ NUEVO: para generar reportes grandes sin JPA/leaks
+    private final JdbcTemplate jdbcTemplate;
+
     @Autowired
-    public FybecaVentaService(VentaRepository ventaRepository, EntityManager entityManager, ClienteService clienteService) {
+    public FybecaVentaService(
+            VentaRepository ventaRepository,
+            EntityManager entityManager,
+            ClienteService clienteService,
+            JdbcTemplate jdbcTemplate
+    ) {
         this.ventaRepository = ventaRepository;
         this.entityManager = entityManager;
         this.clienteService = clienteService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     // ====== Helpers Cliente ======
@@ -175,13 +200,11 @@ public class FybecaVentaService {
                 s = s.trim();
                 if (s.isBlank()) return null;
 
-                // intenta ISO yyyy-MM-dd
                 try {
                     LocalDate ld = LocalDate.parse(s);
                     return Date.from(ld.atStartOfDay(ZONE).toInstant());
                 } catch (Exception ignore) {}
 
-                // intenta dd/MM/yyyy
                 try {
                     DateTimeFormatter f = DateTimeFormatter.ofPattern("d/M/uuuu");
                     LocalDate ld = LocalDate.parse(s, f);
@@ -267,95 +290,134 @@ public class FybecaVentaService {
         return out;
     }
 
-    @Transactional(readOnly = true)
-    public void escribirReporteVentasZip(java.io.OutputStream os, String codCliente, Integer anio, Integer mes, String marca) {
-        try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(os);
-             java.io.OutputStreamWriter osw = new java.io.OutputStreamWriter(zip, java.nio.charset.StandardCharsets.UTF_8);
-             java.io.BufferedWriter bw = new java.io.BufferedWriter(osw)) {
-            zip.putNextEntry(new java.util.zip.ZipEntry("fybeca_ventas.csv"));
-            bw.write("\uFEFF");
-            bw.write("id,anio,mes,dia,marca,nombreProducto,codBarra,codigoSap,descripcion,codPdv,pdv,ciudad,stockDolares,stockUnidades,ventaDolares,ventaUnidad,codCliente,nombreCliente");
-            bw.newLine();
-            int pageSize = 10000;
-            int offset = 0;
-            while (true) {
-                StringBuilder sql = new StringBuilder();
-                sql.append("SELECT v.id, v.anio, v.mes, v.dia, v.marca, v.nombre_Producto, v.cod_Barra, v.codigo_Sap, v.descripcion, ");
-                sql.append("v.cod_Pdv, v.pdv, v.ciudad, v.stock_Dolares, v.stock_Unidades, v.venta_Dolares, v.venta_Unidad, ");
-                sql.append("c.cod_Cliente, c.nombre_Cliente ");
-                sql.append("FROM [SELLOUT].[dbo].[venta] v ");
-                sql.append("JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id ");
-                sql.append("WHERE c.cod_Cliente = :cod ");
-                if (anio != null) sql.append("AND v.anio = :anio ");
-                if (mes != null) sql.append("AND v.mes = :mes ");
-                if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
-                sql.append("ORDER BY v.anio DESC, v.mes DESC, v.dia DESC, v.id DESC ");
-                Query q = entityManager.createNativeQuery(sql.toString());
-                q.setParameter("cod", codCliente);
-                if (anio != null) q.setParameter("anio", anio);
-                if (mes != null) q.setParameter("mes", mes);
-                if (marca != null && !marca.isBlank()) q.setParameter("marca", marca.trim());
-                q.setFirstResult(offset);
-                q.setMaxResults(pageSize);
-                @SuppressWarnings("unchecked")
-                java.util.List<Object[]> rows = q.getResultList();
-                if (rows.isEmpty()) break;
-                for (Object[] r : rows) {
-                    StringBuilder line = new StringBuilder();
-                    line.append(toCsv(r[0])).append(',').append(toCsv(r[1])).append(',').append(toCsv(r[2])).append(',').append(toCsv(r[3])).append(',');
-                    line.append(toCsv(r[4])).append(',').append(toCsv(r[5])).append(',').append(toCsv(r[6])).append(',').append(toCsv(r[7])).append(',');
-                    line.append(toCsv(r[8])).append(',').append(toCsv(r[9])).append(',').append(toCsv(r[10])).append(',').append(toCsv(r[11])).append(',');
-                    line.append(toCsv(r[12])).append(',').append(toCsv(r[13])).append(',').append(toCsv(r[14])).append(',').append(toCsv(r[15])).append(',');
-                    line.append(toCsv(r[16])).append(',').append(toCsv(r[17]));
-                    bw.write(line.toString());
-                    bw.newLine();
+    // =====================================================================================
+    // ===================== ✅ REPORTE ZIP + CSV SIN LEAK (STREAMING) ======================
+    // =====================================================================================
+
+    /**
+     * ✅ IMPORTANTE:
+     * - NO usa EntityManager ni @Transactional
+     * - Usa JdbcTemplate (SqlRowSet) para no mantener sesión/conn JPA viva
+     * - Parte en multiples CSV dentro del ZIP si supera MAX_FILAS_POR_CSV
+     */
+    public void escribirReporteVentasZip(OutputStream os, String codCliente, Integer anio, Integer mes, String marca) {
+        String cod = (codCliente == null || codCliente.isBlank()) ? DEFAULT_COD_CLIENTE : codCliente.trim();
+        String marcaNorm = (marca == null || marca.isBlank()) ? null : marca.trim();
+
+        String sql = """
+            SELECT
+                v.id, v.anio, v.mes, v.dia, v.marca,
+                v.nombre_Producto AS nombreProducto,
+                v.cod_Barra       AS codBarra,
+                v.codigo_Sap      AS codigoSap,
+                v.descripcion,
+                v.cod_Pdv         AS codPdv,
+                v.pdv,
+                v.ciudad,
+                v.stock_Dolares   AS stockDolares,
+                v.stock_Unidades  AS stockUnidades,
+                v.venta_Dolares   AS ventaDolares,
+                v.venta_Unidad    AS ventaUnidad,
+                c.cod_Cliente     AS codCliente,
+                c.nombre_Cliente  AS nombreCliente
+            FROM [SELLOUT].[dbo].[venta] v
+            JOIN [SELLOUT].[dbo].[cliente] c ON c.id = v.cliente_id
+            WHERE c.cod_Cliente = ?
+              AND (? IS NULL OR v.anio = ?)
+              AND (? IS NULL OR v.mes = ?)
+              AND (? IS NULL OR LTRIM(RTRIM(v.marca)) = LTRIM(RTRIM(?)))
+            ORDER BY v.anio DESC, v.mes DESC, v.dia DESC, v.id DESC
+        """;
+
+        try (ZipOutputStream zip = new ZipOutputStream(os)) {
+            int parte = 1;
+            long filasParte = 0;
+
+            BufferedWriter bw = abrirCsv(zip, parte);
+            escribirHeaderCsv(bw);
+
+            SqlRowSet rs = jdbcTemplate.queryForRowSet(
+                    sql,
+                    cod,
+                    anio, anio,
+                    mes, mes,
+                    marcaNorm, marcaNorm
+            );
+
+            while (rs.next()) {
+                if (filasParte >= MAX_FILAS_POR_CSV) {
+                    bw.flush();
+                    zip.closeEntry();
+
+                    parte++;
+                    filasParte = 0;
+
+                    bw = abrirCsv(zip, parte);
+                    escribirHeaderCsv(bw);
                 }
-                bw.flush();
-                offset += pageSize;
+
+                bw.write(
+                        csv(rs.getObject("id")) + "," +
+                        csv(rs.getObject("anio")) + "," +
+                        csv(rs.getObject("mes")) + "," +
+                        csv(rs.getObject("dia")) + "," +
+                        csv(rs.getObject("marca")) + "," +
+                        csv(rs.getObject("nombreProducto")) + "," +
+                        csv(rs.getObject("codBarra")) + "," +
+                        csv(rs.getObject("codigoSap")) + "," +
+                        csv(rs.getObject("descripcion")) + "," +
+                        csv(rs.getObject("codPdv")) + "," +
+                        csv(rs.getObject("pdv")) + "," +
+                        csv(rs.getObject("ciudad")) + "," +
+                        csv(rs.getObject("stockDolares")) + "," +
+                        csv(rs.getObject("stockUnidades")) + "," +
+                        csv(rs.getObject("ventaDolares")) + "," +
+                        csv(rs.getObject("ventaUnidad")) + "," +
+                        csv(rs.getObject("codCliente")) + "," +
+                        csv(rs.getObject("nombreCliente"))
+                );
+                bw.newLine();
+
+                filasParte++;
+                // flush suave cada N filas (evita usar mucha memoria)
+                if ((filasParte % 50_000) == 0) bw.flush();
             }
+
             bw.flush();
             zip.closeEntry();
+
+            // opcional: README dentro del zip
+            zip.putNextEntry(new ZipEntry("README.txt"));
+            String readme = "Reporte ZIP+CSV generado: " +
+                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "\n" +
+                    "Cliente: " + cod + "\n" +
+                    "Partes: " + parte + "\n";
+            zip.write(readme.getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error generando ZIP: " + e.getMessage(), e);
         }
     }
 
-    private String toCsv(Object v) {
+    private BufferedWriter abrirCsv(ZipOutputStream zip, int parte) throws IOException {
+        String name = String.format("fybeca_ventas_part_%03d.csv", parte);
+        zip.putNextEntry(new ZipEntry(name));
+        return new BufferedWriter(new java.io.OutputStreamWriter(zip, StandardCharsets.UTF_8), 64 * 1024);
+    }
+
+    private void escribirHeaderCsv(BufferedWriter bw) throws IOException {
+        bw.write('\ufeff'); // BOM para Excel
+        bw.write("id,anio,mes,dia,marca,nombreProducto,codBarra,codigoSap,descripcion,codPdv,pdv,ciudad,stockDolares,stockUnidades,ventaDolares,ventaUnidad,codCliente,nombreCliente");
+        bw.newLine();
+    }
+
+    private String csv(Object v) {
         if (v == null) return "";
         String s = String.valueOf(v);
         boolean needQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
         if (s.contains("\"")) s = s.replace("\"", "\"\"");
         return needQuote ? "\"" + s + "\"" : s;
-    }
-
-    public Optional<Venta> obtenerVentaPorIdYCodCliente(Long id, String codCliente) {
-        String jpql = "SELECT v FROM Venta v WHERE v.id = :id AND v.cliente.codCliente = :cod";
-        List<Venta> res = entityManager.createQuery(jpql, Venta.class)
-                .setParameter("id", id)
-                .setParameter("cod", codCliente)
-                .getResultList();
-        return res.isEmpty() ? Optional.empty() : Optional.of(res.get(0));
-    }
-
-    public Optional<Venta> obtenerVentaFybecaPorId(Long id) {
-        return obtenerVentaPorIdYCodCliente(id, DEFAULT_COD_CLIENTE);
-    }
-
-    public boolean eliminarVenta(Long id) {
-        return ventaRepository.findById(id).map(v -> {
-            ventaRepository.delete(v);
-            return true;
-        }).orElse(false);
-    }
-
-    public boolean eliminarVentas(List<Long> ids) {
-        try {
-            List<Venta> ventas = ventaRepository.findAllById(ids);
-            ventaRepository.deleteAll(ventas);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     // =====================================================================================
@@ -391,12 +453,6 @@ public class FybecaVentaService {
     // =================== Validación ÚNICA: producto por codItem ==========================
     // =====================================================================================
 
-    /**
-     * ✅ SOLO valida por codItem:
-     * - Busca producto por p.cod_Item = :codigo
-     * - Si no encuentra: agrega a codigosNoEncontrados y retorna false
-     * - Si encuentra: setea producto_id en la venta y retorna true
-     */
     public boolean cargarProductoPorCodItem(Cliente cliente, Venta venta, Set<String> codigosNoEncontrados) {
         String codigo = venta.getCodBarra(); // aquí viene el codItem desde el Excel
         if (codigo == null || codigo.trim().isEmpty()) {
@@ -444,10 +500,6 @@ public class FybecaVentaService {
     // =================== Enriquecer desde SAP_Prod_cache (SIN PISAR) =====================
     // =====================================================================================
 
-    /**
-     * ✅ Completa codigoSap/marca/descripcion/nombreProducto SOLO si están vacíos.
-     * Se busca por cod_barra (usa el codBarraSap real del producto).
-     */
     private void enriquecerDesdeSapCacheSiFalta(Venta v) {
         String codBarra = v.getCodBarra();
         if (codBarra == null || codBarra.trim().isEmpty()) return;
@@ -475,38 +527,19 @@ public class FybecaVentaService {
             String desc = (String) r[2];
             String marca = (String) r[3];
 
-            // ✅ NO PISAR: solo llena si viene vacío
             if (v.getCodigoSap() == null || v.getCodigoSap().trim().isEmpty()) v.setCodigoSap(codigoSap);
-
-            // codBarra: si por alguna razón está vacío, se completa
             if ((v.getCodBarra() == null || v.getCodBarra().trim().isEmpty()) && cb != null) v.setCodBarra(cb.trim());
-
             if (v.getDescripcion() == null || v.getDescripcion().trim().isEmpty()) v.setDescripcion(desc);
             if (v.getNombreProducto() == null || v.getNombreProducto().trim().isEmpty()) v.setNombreProducto(desc);
             if (v.getMarca() == null || v.getMarca().trim().isEmpty()) v.setMarca(marca);
 
-        } catch (Exception ignore) {
-            // no cortar carga
-        }
+        } catch (Exception ignore) {}
     }
 
     // =====================================================================================
     // ============================= CARGA EXCEL (FULL) ===================================
     // =====================================================================================
 
-    /**
-     * ✅ Carga completa:
-     * - Lee TODAS las filas del Excel (sin filtros)
-     * - Única validación: existe producto por CODITEM (viene del Excel)
-     * - Si no existe -> codigosNoEncontrados + sigue
-     * - Si existe -> INSERTA (no actualiza)
-     *
-     * ✅ Campos pedidos (codPdv, pdv, marca, producto/nombreProducto, codigoSap, descripcion):
-     * - Se respetan los del Excel
-     * - SOLO si vienen vacíos: se completan desde SAP_Prod_cache
-     *
-     * Hoja: usa la primera hoja por defecto.
-     */
     public Map<String, Object> cargarExcelFybeca(InputStream inputStream, String codCliente, String nombreArchivo) {
         long t0 = System.nanoTime();
 
@@ -533,7 +566,6 @@ public class FybecaVentaService {
                 return out;
             }
 
-            // Busca encabezado con al menos cod_item (o item)
             Integer headerRow = findHeaderRow(sh, Set.of("cod_item"), 50);
             if (headerRow == null) headerRow = findHeaderRow(sh, Set.of("item"), 50);
 
@@ -550,7 +582,6 @@ public class FybecaVentaService {
 
             Map<String, Integer> h = buildHeaderIndex(sh, headerRow);
 
-            // columnas posibles (ajusta si tus headers se llaman distinto)
             Integer cCodItem = pick(h, "cod_item", "item", "codigo_item", "coditem");
 
             Integer cFecha   = pick(h, "fecha", "fecha_venta", "fecha_corte");
@@ -591,7 +622,6 @@ public class FybecaVentaService {
                     Venta v = new Venta();
                     v.setCliente(cliente);
 
-                    // fecha/anio/mes/dia
                     Integer anio = (cAnio != null) ? safeInt(getString(row, cAnio)) : null;
                     Integer mes  = (cMes != null)  ? safeInt(getString(row, cMes))  : null;
                     Integer dia  = (cDia != null)  ? safeInt(getString(row, cDia))  : null;
@@ -610,29 +640,23 @@ public class FybecaVentaService {
                         v.setDia(zdt.getDayOfMonth());
                     }
 
-                    // ✅ aquí guardamos temporalmente CODITEM en codBarra para validar
+                    // temporal: codItem para validar
                     v.setCodBarra(codItem);
 
-                    // ✅ tienda: respeta lo del Excel
                     String codPdvExcel = getString(row, cCodPdv);
                     String pdvExcel = getString(row, cPdv);
 
                     String codPdv = normalizarCodPdv(codPdvExcel);
                     v.setCodPdv(codPdv);
-
-                    // pdv: si viene vacío, usa codPdv (igual que tu lógica vieja)
                     v.setPdv((pdvExcel != null && !pdvExcel.trim().isEmpty()) ? pdvExcel.trim() : codPdv);
 
-                    // ✅ ciudad: NO tocar (se queda como viene / o null)
                     v.setCiudad(getString(row, cCiudad));
 
-                    // valores
                     v.setVentaDolares(opt0(getDouble(row, cVentaUsd)));
                     v.setVentaUnidad(opt0(getDouble(row, cVentaUds)));
                     v.setStockDolares(opt0(getDouble(row, cStockUsd)));
                     v.setStockUnidades(opt0(getDouble(row, cStockUds)));
 
-                    // ✅ campos de negocio (respeta Excel primero)
                     String marcaExcel = getString(row, cMarca);
                     String descExcel = getString(row, cDescripcion);
                     String codigoSapExcel = getString(row, cCodigoSap);
@@ -644,26 +668,21 @@ public class FybecaVentaService {
                     }
                     if (codigoSapExcel != null && !codigoSapExcel.trim().isEmpty()) v.setCodigoSap(codigoSapExcel.trim());
 
-                    // ✅ ÚNICA VALIDACIÓN: existe producto por codItem
                     boolean okProd = cargarProductoPorCodItem(cliente, v, codigosNoEncontrados);
                     if (!okProd) {
                         incidencias.add(inc(codItem, "No existe PRODUCTO por codItem. Fila omitida.", r + 1));
                         continue;
                     }
 
-                    // ✅ AHORA que ya tengo el producto, GUARDO codBarra REAL (no el codItem)
                     if (v.getProducto() != null && v.getProducto().getCodBarraSap() != null
                             && !v.getProducto().getCodBarraSap().trim().isEmpty()) {
                         v.setCodBarra(v.getProducto().getCodBarraSap().trim());
                     } else {
-                        // fallback: si producto no trae codBarraSap, dejo el codItem para no perder la fila
                         v.setCodBarra(codItem);
                     }
 
-                    // ✅ completar SOLO si faltan campos (sin pisar lo del Excel)
                     enriquecerDesdeSapCacheSiFalta(v);
 
-                    // ✅ INSERT ONLY
                     ventaRepository.save(v);
                     filasInsertadas++;
 

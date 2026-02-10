@@ -431,11 +431,18 @@ public class DepratiController {
             @RequestParam(value = "marca", required = false) String marca
     ) {
         String cod = resolveCodCliente(codCliente);
-        String filename = "deprati_ventas_" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".zip";
-        StreamingResponseBody body = outputStream -> ventaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+
+        String filename = "deprati_ventas_" +
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) +
+                ".zip";
+
+        StreamingResponseBody body = outputStream ->
+                ventaService.escribirReporteVentasZip(outputStream, cod, anio, mes, marca);
+
         return ResponseEntity.ok()
                 .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename)
                 .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
                 .body(body);
     }
+
 }

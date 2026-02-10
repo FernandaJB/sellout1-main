@@ -697,7 +697,7 @@ select:focus {
   transform: scale(1.1) !important;
   color: #f0f0f0 !important;
 }
-* Add this more specific selector for the X icon */
+/* Add this more specific selector for the X icon */
 .fybeca-confirm-dialog .p-dialog-header .p-dialog-header-close .p-dialog-header-close-icon {
   color: white !important;
   font-size: 1.2rem !important;
