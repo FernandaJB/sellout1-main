@@ -592,13 +592,19 @@ public class FybecaVentaService {
             Integer cCodPdv  = pick(h, "cod_pdv", "codigo_tienda", "cod_tienda", "pdv_codigo", "cod_local", "codigo_pdv");
             Integer cPdv     = pick(h, "pdv", "tienda", "nombre_tienda", "nombre_local");
 
-            Integer cCiudad  = pick(h, "ciudad");
+            Integer cCiudad  = pick(h, "ciudad","CIUDAD");
 
-            Integer cVentaUsd = pick(h, "venta_dolares", "venta_usd", "ventas_usd", "ventas_en_usd", "venta_en_usd");
-            Integer cVentaUds = pick(h, "venta_unidad", "venta_unidades", "unidades", "uds", "venta_uds");
+            Integer cVentaUsd = pick(h, "venta_dolares", "venta_usd", "ventas_usd", "ventas_en_usd","venta dolares");
+            Integer cVentaUds = pick(h, "venta_unidad", "venta_unidades", "unidades", "uds", "venta unidades");
 
-            Integer cStockUsd = pick(h, "stock_dolares", "stock_usd", "stock_en_usd");
-            Integer cStockUds = pick(h, "stock_unidades", "stock_unidad", "stock", "stock_uds");
+            Integer cStockUsd = pick(h, " Stock Dolares", "stock_dolares", "stock_usd", "stock_en_usd");
+            Integer cStockUds = pick(h,
+        "stock_en_unidades",
+        "stock_unidades",
+        "stock en Unidad",
+        "stock_uds",
+        "Stock en Unidades");
+
 
             Integer cMarca       = pick(h, "marca");
             Integer cDescripcion = pick(h, "descripcion", "producto", "nombre_producto", "nombreproducto");
