@@ -25,7 +25,7 @@ import "primeflex/primeflex.css";
 // ================= API base =================
 const API_BASE = "/api-sellout/rm";
 
-// ======= Límite de eliminación/selección (igual que TemplateGeneral) =======
+// ======= Límite de eliminación/selección =======
 const MAX_DELETE = 2000;
 
 // ================= Helpers generales =================
@@ -128,7 +128,7 @@ const safeNum = (v, def = 0) => {
   return Number.isFinite(n) ? n : def;
 };
 
-// ====== Logs / guardado manual (igual estilo que TemplateGeneral) ======
+// ====== Logs / guardado manual ======
 const saveTextFile = async (contenido, suggestedName = "log.txt") => {
   try {
     if (!window.showSaveFilePicker) {
@@ -155,6 +155,46 @@ const saveTextFile = async (contenido, suggestedName = "log.txt") => {
   }
 };
 
+// ============================
+// ✅ NUEVO: normaliza incidencias del backend a texto legible
+// Soporta: ["texto", ...]  ó  [{codigo,motivo,fila,hoja}, ...]  ó mix
+// ============================
+const normalizeIncidencias = (raw) => {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr
+    .map((it, idx) => {
+      if (it == null) return null;
+      if (typeof it === "string") {
+        const s = it.trim();
+        return s ? `${idx + 1}. ${s}` : null;
+      }
+      if (typeof it === "object") {
+        const hoja = String(it?.hoja ?? "SIN_HOJA");
+        const fila = it?.fila != null ? String(it.fila) : "-";
+        const codigo = String(it?.codigo ?? "SIN_CODIGO");
+        const motivo = String(it?.motivo ?? "SIN_MOTIVO");
+        return `${idx + 1}. HOJA=${hoja} | FILA=${fila} | CODIGO=${codigo} | MOTIVO=${motivo}`;
+      }
+      const s = String(it).trim();
+      return s ? `${idx + 1}. ${s}` : null;
+    })
+    .filter(Boolean);
+};
+
+// ✅ NUEVO: arma un resumen por tipos para que el log sea "específico"
+const summarizeIncidencias = (lines) => {
+  const byType = new Map();
+  (lines || []).forEach((s) => {
+    const m = /CODIGO=([^|]+)\s*\|/i.exec(s);
+    const key = (m?.[1] || "OTRAS").trim();
+    byType.set(key, (byType.get(key) || 0) + 1);
+  });
+  const summary = Array.from(byType.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `  - ${k}: ${v}`)
+    .join("\n");
+  return summary || "  (sin incidencias)";
+};
 
 const buildDetailedLog = ({
   fileName,
@@ -164,13 +204,16 @@ const buildDetailedLog = ({
   counts = { insertadas: 0, actualizadas: 0, ignoradas: 0, conError: 0, total: 0 },
   incidencias = [],
   noEncontrados = [],
+  extra = {}, // ✅ NUEVO: info adicional (ventas/stock, ok, etc.)
 }) => {
   const sizeMB = (fileSizeBytes / (1024 * 1024)) || 0;
   const safe = (n) => (Number.isFinite(n) ? n : 0);
   const total = safe(counts.total);
   const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
   const tps = total ? (total / elapsedSec).toFixed(2) : "0.00";
-  const tpm = total ? (total * 60 / elapsedSec).toFixed(2) : "0.00";
+  const tpm = total ? ((total * 60) / elapsedSec).toFixed(2) : "0.00";
+
+  const incLines = normalizeIncidencias(incidencias);
 
   const lines = [
     "LOG_CARGA_DETALLADO_RM",
@@ -190,11 +233,23 @@ const buildDetailedLog = ({
     `  THROUGHPUT_filas_por_seg: ${tps}`,
     `  THROUGHPUT_filas_por_min: ${tpm}`,
     "",
-    "INCIDENCIAS:",
   ];
 
-  const inc = Array.isArray(incidencias) ? incidencias.filter(Boolean) : [];
-  if (inc.length) inc.forEach((t) => lines.push(`  ${t}`));
+  // ✅ NUEVO: detalle extra (muy útil para entender Ventas vs Stock)
+  if (extra && Object.keys(extra).length) {
+    lines.push("DETALLE_CARGA:");
+    Object.entries(extra).forEach(([k, v]) => {
+      lines.push(`  ${k}: ${v}`);
+    });
+    lines.push("");
+  }
+
+  lines.push("INCIDENCIAS_RESUMEN:");
+  lines.push(summarizeIncidencias(incLines));
+  lines.push("");
+
+  lines.push("INCIDENCIAS_DETALLE:");
+  if (incLines.length) incLines.forEach((t) => lines.push(`  ${t}`));
   else lines.push("  (sin incidencias)");
 
   lines.push("");
@@ -221,6 +276,7 @@ const buildIncidenciasTxt = ({ fileName, counts, noEncontrados = [], incidencias
   const SS = String(now.getSeconds()).padStart(2, "0");
 
   const safe = (n) => (Number.isFinite(n) ? n : 0);
+  const incLines = normalizeIncidencias(incidencias);
 
   const lines = [
     "INCIDENCIAS_RM",
@@ -242,8 +298,12 @@ const buildIncidenciasTxt = ({ fileName, counts, noEncontrados = [], incidencias
   }
 
   lines.push("");
-  lines.push("INCIDENCIAS_SERVIDOR:");
-  if (incidencias?.length) incidencias.forEach((t) => lines.push(`  ${String(t)}`));
+  lines.push("INCIDENCIAS_SERVIDOR_RESUMEN:");
+  lines.push(summarizeIncidencias(incLines));
+  lines.push("");
+
+  lines.push("INCIDENCIAS_SERVIDOR_DETALLE:");
+  if (incLines.length) incLines.forEach((t) => lines.push(`  ${t}`));
   else lines.push("  (sin incidencias)");
 
   return lines.join("\n");
@@ -280,7 +340,7 @@ const RM = () => {
   const [marcas, setMarcas] = useState([]);
   const [clientesOptions, setClientesOptions] = useState([]);
 
-  // filtros aplicados (los que realmente usan GET)
+  // filtros aplicados
   const [appliedFilters, setAppliedFilters] = useState({
     year: null,
     month: null,
@@ -292,7 +352,7 @@ const RM = () => {
 
   const [globalFilter, setGlobalFilter] = useState("");
 
-  // paginación igual que TemplateGeneral
+  // paginación
   const [paginatorState, setPaginatorState] = useState({
     first: 0,
     rows: 50,
@@ -311,7 +371,7 @@ const RM = () => {
   const [logDetalladoTxt, setLogDetalladoTxt] = useState(null);
   const [logDetalladoName, setLogDetalladoName] = useState(null);
 
-  // ===== Toast helpers (mismo estilo base) =====
+  // ===== Toast helpers =====
   const showToast = ({ type = "info", summary, detail, life = 3500, sticky, content }) => {
     if (!toast.current) return;
     toast.current.show({ severity: type, summary, detail, life, sticky, content });
@@ -321,7 +381,7 @@ const RM = () => {
   const showWarn = (m) => showToast({ type: "warn", summary: "Advertencia", detail: m });
   const showError = (m) => showToast({ type: "error", summary: "Error", detail: m, life: 8000 });
 
-  // ===== timers overlay (igual que TemplateGeneral) =====
+  // ===== timers overlay =====
   useEffect(() => {
     if (uploadRemainingMs == null) return;
     if (uploadTimerRef.current) clearInterval(uploadTimerRef.current);
@@ -366,12 +426,11 @@ const RM = () => {
 
   const buildQuery = (f) => {
     const params = new URLSearchParams();
-    if (f.cliente) params.set("codCliente", String(f.cliente)); // si RM lo soporta
+    if (f.cliente) params.set("codCliente", String(f.cliente));
     if (f.year !== null) params.set("anio", String(f.year));
     if (f.month !== null) params.set("mes", String(f.month));
     if (f.marca) params.set("marca", f.marca);
 
-    // fechas (si RM no lo usa, no afecta)
     if (f.dateFrom) {
       const d = new Date(f.dateFrom);
       params.set(
@@ -387,7 +446,6 @@ const RM = () => {
       );
     }
 
-    // compat
     params.set("limit", "10000");
     params.set("offset", "0");
     return params.toString();
@@ -421,7 +479,7 @@ const RM = () => {
     });
   };
 
-  // ===== Loads options auxiliares (marcas/años/meses/clientes) =====
+  // ===== Loads options auxiliares =====
   const loadClientesOptions = async () => {
     try {
       const res = await fetch("/api-sellout/clientes/empresas", { method: "GET" });
@@ -439,7 +497,6 @@ const RM = () => {
         .filter(Boolean);
       setClientesOptions(opts);
     } catch {
-      // fallback: se llenará desde ventas
       setClientesOptions([]);
     }
   };
@@ -451,8 +508,6 @@ const RM = () => {
     const marcasList = [...new Set((list || []).map((v) => String(v?.marca || "").trim()).filter(Boolean))].sort();
     setMarcas(marcasList);
 
-    // meses depende del año seleccionado
-    // (se actualizará en loadMonthsOptions)
     if (!clientesOptions?.length) {
       const map = new Map();
       (list || []).forEach((v) => {
@@ -470,7 +525,6 @@ const RM = () => {
       setMonthsOptions([]);
       return;
     }
-    // RM no tiene endpoint de meses en tu código; lo hacemos por dataset (igual fallback del TemplateGeneral)
     const months = [
       ...new Set(ventas.filter((v) => Number(v.anio) === Number(anio)).map((v) => Number(v.mes))),
     ]
@@ -529,12 +583,10 @@ const RM = () => {
 
   useEffect(() => {
     loadClientesOptions();
-    // carga inicial sin filtros
     loadVentas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // reset paginación cuando cambia filtro aplicado o global search
   useEffect(() => {
     setPaginatorState((p) => ({ ...p, first: 0, page: 0 }));
   }, [appliedFilters, globalFilter]);
@@ -557,7 +609,7 @@ const RM = () => {
     return base;
   }, [ventas, hasAnyApplied, appliedFilters, globalFilter]);
 
-  // ===== Import Excel RM (mismo flow de UI que TemplateGeneral) =====
+  // ===== Import Excel RM =====
   const cargarExcelRM = async (file) => {
     if (!file) return showWarn("No seleccionaste ningún archivo.");
     const ext = file.name.split(".").pop().toLowerCase();
@@ -588,10 +640,8 @@ const RM = () => {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      // si quieres que el filtro cliente se mande al upload, lo mandamos si está aplicado
       if (appliedFilters?.cliente) formData.append("codCliente", String(appliedFilters.cliente));
 
-      // RM controller: POST /api-sellout/rm/subir-archivo-venta (JSON)
       const res = await fetch(`${API_BASE}/subir-archivo-venta`, {
         method: "POST",
         body: formData,
@@ -614,8 +664,6 @@ const RM = () => {
 
       const result = await res.json();
 
-      // RM suele devolver: ok, filasLeidasVentas, filasProcesadasVentas, filasLeidasStock, filasProcesadasStock,
-      // codigosNoEncontrados, incidencias
       const ok = !!result?.ok;
 
       const filasLV = safeNum(result?.filasLeidasVentas, 0);
@@ -624,13 +672,17 @@ const RM = () => {
       const filasPS = safeNum(result?.filasProcesadasStock, 0);
 
       const noEncontrados = Array.isArray(result?.codigosNoEncontrados) ? result.codigosNoEncontrados : [];
-      const incidenciasServidor = Array.isArray(result?.incidencias) ? result.incidencias : [];
+      const incidenciasServidorRaw = Array.isArray(result?.incidencias) ? result.incidencias : [];
 
-      // armamos logs para guardado manual
+      // ✅ CLAVE: convertir incidencias a líneas legibles (evita [object Object])
+      const incidenciasServidor = normalizeIncidencias(incidenciasServidorRaw);
+
+      // counts
       const counts = {
         insertadas: filasPV + filasPS,
         actualizadas: 0,
         ignoradas: 0,
+        // ✅ conError: solo por incidencias/no-encontrados (tu lógica original, pero ya sin [object Object])
         conError: (incidenciasServidor?.length || 0) + (noEncontrados?.length || 0),
         total: (filasLV + filasLS) || (filasPV + filasPS),
       };
@@ -638,11 +690,12 @@ const RM = () => {
       const now = new Date();
       const fechaStr = now.toISOString().replace(/[:T]/g, "-").split(".")[0];
 
+      // incidencias txt
       const incidenciasTxt = buildIncidenciasTxt({
         fileName: file.name,
         counts,
         noEncontrados,
-        incidencias: incidenciasServidor,
+        incidencias: incidenciasServidorRaw, // se normaliza adentro igual
       });
       setLogIncidenciasTxt(incidenciasTxt);
       setLogIncidenciasName(`incidencias_rm_${fechaStr}.txt`);
@@ -650,22 +703,30 @@ const RM = () => {
       const end = performance.now();
       const elapsedMs = Math.max(0, Math.round(end - start));
 
+      // ✅ log detallado ahora trae resumen + detalle + datos de ventas/stock
       const detailed = buildDetailedLog({
         fileName: file.name,
         fileSizeBytes: file.size,
         estMs,
         elapsedMs,
         counts,
-        incidencias: incidenciasServidor,
+        incidencias: incidenciasServidorRaw,
         noEncontrados,
+        extra: {
+          ok: ok ? "true" : "false",
+          "VENTAS_leidas": filasLV,
+          "VENTAS_procesadas": filasPV,
+          "STOCK_leidas": filasLS,
+          "STOCK_procesadas": filasPS,
+          "NO_ENCONTRADOS_count": noEncontrados.length,
+          "INCIDENCIAS_count": incidenciasServidor.length,
+        },
       });
       setLogDetalladoTxt(detailed);
       setLogDetalladoName(`log_detallado_rm_${fechaStr}.txt`);
 
-      // recargar ventas (con filtros aplicados)
       await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
 
-      // toast final sticky como TemplateGeneral
       toast.current?.show({
         severity: (!ok || counts.conError) ? "warn" : "success",
         summary: "Carga finalizada",
@@ -687,7 +748,7 @@ const RM = () => {
 
             {incidenciasServidor?.length > 0 && (
               <div style={{ marginTop: "0.5rem" }}>
-                <div className="font-bold">Incidencias reportadas por el servidor:</div>
+                <div className="font-bold">Incidencias (detalle):</div>
                 <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
                   {incidenciasServidor.slice(0, 5).map((t, i) => (
                     <li key={i} style={{ whiteSpace: "pre-wrap" }}>{String(t)}</li>
@@ -717,7 +778,7 @@ const RM = () => {
     }
   };
 
-  // ===== Guardado manual de logs (mismo que TemplateGeneral) =====
+  // ===== Guardado manual de logs =====
   const handleSaveIncidencias = async () => {
     if (!logIncidenciasTxt) return showWarn("No hay incidencias generadas todavía.");
     try {
@@ -742,7 +803,6 @@ const RM = () => {
   const openEdit = async (rowData) => {
     try {
       const qs = new URLSearchParams();
-      // si el backend necesita codCliente, se lo pasamos si está aplicado
       if (appliedFilters?.cliente) qs.set("codCliente", String(appliedFilters.cliente));
       const { data } = await apiFetch(`/venta/${rowData.id}${qs.toString() ? `?${qs.toString()}` : ""}`);
       setEditVenta(data);
@@ -807,7 +867,6 @@ const RM = () => {
       accept: async () => {
         try {
           const ids = selectedVentas.map((v) => v.id).filter(Boolean);
-          // chunk igual al otro JS
           const chunkSize = 2000;
           const qs = new URLSearchParams();
           if (appliedFilters?.cliente) qs.set("codCliente", String(appliedFilters.cliente));
@@ -830,7 +889,7 @@ const RM = () => {
     });
   };
 
-  // ===== Reporte backend (igual botón TemplateGeneral) =====
+  // ===== Reporte backend =====
   const downloadVentasReport = async () => {
     try {
       const { blob, filename } = await apiFetch("/reporte-ventas", { expect: "blob" });
@@ -844,7 +903,7 @@ const RM = () => {
     }
   };
 
-  // ===== Exportar Filtrados (igual idea TemplateGeneral) =====
+  // ===== Exportar Filtrados =====
   const downloadFilteredVentasReport = () => {
     const dataTable = filteredData.length ? filteredData : ventas;
     if (!dataTable.length) return showWarn("No hay datos para generar el reporte.");
@@ -892,7 +951,7 @@ const RM = () => {
     showSuccess(`Se ha generado el reporte con ${exportData.length} registros.`);
   };
 
-  // ===== filtros UI (aplicar/limpiar igual TemplateGeneral) =====
+  // ===== filtros UI =====
   const handleApplyFilters = async () => {
     if (filterMonth !== null && filterYear === null) {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");

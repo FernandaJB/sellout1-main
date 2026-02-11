@@ -36,22 +36,28 @@ public class RMService {
     private static final ZoneId ZONE = ZoneId.systemDefault();
 
     // ✅ Pon aquí el ID real de tu producto genérico "NO ENCONTRADO"
-    private static final Long PRODUCTO_FALLBACK_ID = 3185L; // <-- CAMBIA ESTE ID
+    private static final Long PRODUCTO_FALLBACK_ID = 3185L;
 
     private final VentaRepository ventaRepository;
     private final EntityManager entityManager;
     private final ClienteService clienteService;
 
+    // ========================= MODELOS LOG =========================
     public static final class Incidencia {
         public final String codigo;
         public final String motivo;
         public final int fila;     // fila Excel (1-based)
-        public final String hoja;  // VENTAS / STOCK
+        public final String hoja;  // VENTAS / STOCK / GENERAL
         public Incidencia(String codigo, String motivo, int fila, String hoja) {
             this.codigo = codigo;
             this.motivo = motivo;
             this.fila = fila;
             this.hoja = hoja;
+        }
+
+        @Override
+        public String toString() {
+            return "HOJA=" + hoja + " | FILA=" + fila + " | CODIGO=" + codigo + " | MOTIVO=" + motivo;
         }
     }
 
@@ -66,6 +72,29 @@ public class RMService {
             this.codBarra = codBarra;
             this.descripcion = descripcion;
             this.marca = marca;
+        }
+    }
+
+    // ✅ Para llevar fila Excel al upsert de STOCK SIN tocar tu entidad Venta (lo dejamos por compatibilidad)
+    public interface VentaConFilaExcel {
+        Integer getFilaExcel();
+    }
+
+    public static final class VentaFila extends Venta implements VentaConFilaExcel {
+        private Integer filaExcel;
+        @Override public Integer getFilaExcel() { return filaExcel; }
+        public void setFilaExcel(Integer filaExcel) { this.filaExcel = filaExcel; }
+    }
+
+    // ✅ DTO interno para mapear STOCK por llave
+    private static final class StockInfo {
+        final double su;
+        final double sd;
+        final int filaExcel;
+        StockInfo(double su, double sd, int filaExcel) {
+            this.su = su;
+            this.sd = sd;
+            this.filaExcel = filaExcel;
         }
     }
 
@@ -229,40 +258,6 @@ public class RMService {
     }
 
     // ========================= SAP_Prod_cache =========================
-    private Optional<SapCacheRow> findSapCacheByCodBarra(String codBarraSap) {
-        if (codBarraSap == null) return Optional.empty();
-        String cb = codBarraSap.trim();
-        if (cb.isEmpty()) return Optional.empty();
-
-        try {
-            String sql = """
-                SELECT TOP 1
-                    codigo_sap,
-                    cod_barra,
-                    descripcion,
-                    marca
-                FROM SELLOUT.dbo.SAP_Prod_cache
-                WHERE cod_barra = :cb
-            """;
-            Query q = entityManager.createNativeQuery(sql);
-            q.setParameter("cb", cb);
-
-            @SuppressWarnings("unchecked")
-            List<Object[]> rows = q.getResultList();
-            if (rows.isEmpty()) return Optional.empty();
-
-            Object[] r = rows.get(0);
-            return Optional.of(new SapCacheRow(
-                    (String) r[0],
-                    (String) r[1],
-                    (String) r[2],
-                    (String) r[3]
-            ));
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
-
     private void aplicarDatosSapCache(Venta v, SapCacheRow sap) {
         if (sap == null) return;
         v.setCodigoSap(sap.codigoSap);
@@ -272,32 +267,19 @@ public class RMService {
         v.setMarca(sap.marca);
     }
 
-    /**
-     * Inserta Producto si no existe, usando datos de SAP_Prod_cache.
-     * IMPORTANTE: Ajusta los setters según tu entidad Producto.
-     */
     @Transactional
     protected Long crearProductoDesdeSapCache(String cb, SapCacheRow sap) {
-        // Recheck por si se insertó en paralelo (o en otra iteración)
         Optional<Long> ya = productoRepository.findIdByCodBarraSap(cb);
         if (ya.isPresent()) return ya.get();
 
         Producto p = new Producto();
-
-        // ⚠️ Ajusta estos setters si tu entidad Producto usa otros nombres.
-        // Lo mínimo: guardar codBarraSap para poder encontrarlo después.
-        try {
-            p.setCodBarraSap(cb);
-        } catch (Exception ignore) {
-            // si tu entidad no tiene setCodBarraSap, debes ajustar esto
-        }
+        try { p.setCodBarraSap(cb); } catch (Exception ignore) {}
 
         Producto saved = productoRepository.save(p);
         productoRepository.flush();
         return saved.getId();
     }
 
-    // ======= SAP cache en lote =======
     private Map<String, SapCacheRow> findSapCacheByCodBarraBatch(Set<String> codigos) {
         Map<String, SapCacheRow> out = new HashMap<>();
         if (codigos == null || codigos.isEmpty()) return out;
@@ -337,7 +319,6 @@ public class RMService {
         return out;
     }
 
-    // ========================= Resolver PRODUCTO ids en lote (1 query) =========================
     private Map<String, Long> findProductoIdsBatchByCodBarraSap(Collection<String> cods) {
         if (cods == null || cods.isEmpty()) return Map.of();
 
@@ -347,14 +328,13 @@ public class RMService {
         for (Object[] r : rows) {
             String cod = (String) r[0];
             Long id = (Long) r[1];
-            if (cod != null && id != null) {
-                out.put(cod.trim(), id);
-            }
+            if (cod != null && id != null) out.put(cod.trim(), id);
         }
         return out;
     }
 
     // ========================= Upsert VENTAS =========================
+    // ✅ ACTUALIZA TAMBIÉN STOCK cuando existe (porque ya viene armado con la hoja STOCK)
     @Transactional
     protected void upsertVentasEnBloque(List<Venta> lote) {
         if (lote == null || lote.isEmpty()) return;
@@ -382,6 +362,11 @@ public class RMService {
                 Venta e = existente.get();
                 e.setVentaDolares(v.getVentaDolares());
                 e.setVentaUnidad(v.getVentaUnidad());
+
+                // ✅ stock también
+                e.setStockUnidades(v.getStockUnidades());
+                e.setStockDolares(v.getStockDolares());
+
                 e.setMarca(v.getMarca());
                 e.setNombreProducto(v.getNombreProducto());
                 e.setDescripcion(v.getDescripcion());
@@ -404,60 +389,93 @@ public class RMService {
         entityManager.clear();
     }
 
-    // ========================= STOCK =========================
+    // ========================= STOCK (UPDATE seguro + log específico) =========================
+    // (Se deja, pero YA NO se usa en cargarExcelRM porque ahora el stock se inserta junto con ventas)
     @Transactional
-    protected void upsertStockEnBloque(Long clienteId, List<Venta> loteStock) {
+    protected void upsertStockEnBloque(Long clienteId, List<? extends Venta> loteStock, List<Incidencia> incidencias) {
         if (loteStock == null || loteStock.isEmpty()) return;
 
         final int BATCH = 2000;
         int i = 0;
 
+        final String sqlUpd = """
+            UPDATE SELLOUT.dbo.venta
+               SET stock_unidades = :su,
+                   stock_dolares  = :sd
+             WHERE cliente_id = :cli
+               AND anio = :anio AND mes = :mes AND dia = :dia
+               AND cod_barra = :cb
+               AND cod_pdv   = :cp
+        """;
+
         for (Venta v : loteStock) {
 
-            String codBarra = v.getCodBarra() == null ? null : v.getCodBarra().trim();
-            v.setCodBarra(codBarra);
+            String cb = v.getCodBarra() == null ? null : v.getCodBarra().trim();
+            String tienda = tiendaKey(v.getCodPdv());
 
-            String codPdv = tiendaKey(v.getCodPdv());
-            v.setCodPdv(codPdv);
-            v.setPdv(codPdv);
+            v.setCodBarra(cb);
+            v.setCodPdv(tienda);
+            v.setPdv(tienda);
 
-            String sqlUpd = """
-                UPDATE SELLOUT.dbo.venta
-                   SET stock_unidades = :su,
-                       stock_dolares  = :sd
-                 WHERE cliente_id = :cli
-                   AND anio = :anio AND mes = :mes AND dia = :dia
-                   AND cod_barra = :cb
-                   AND cod_pdv   = :cp
-            """;
+            int filaExcel = -1;
+            if (v instanceof VentaConFilaExcel ve && ve.getFilaExcel() != null) filaExcel = ve.getFilaExcel();
 
-            int updated = entityManager.createNativeQuery(sqlUpd)
-                    .setParameter("su", v.getStockUnidades())
-                    .setParameter("sd", v.getStockDolares())
-                    .setParameter("cli", clienteId)
-                    .setParameter("anio", v.getAnio())
-                    .setParameter("mes", v.getMes())
-                    .setParameter("dia", v.getDia())
-                    .setParameter("cb", v.getCodBarra())
-                    .setParameter("cp", v.getCodPdv())
-                    .executeUpdate();
+            if (cb == null || cb.isBlank()) {
+                incidencias.add(new Incidencia("CODBARRA_VACIO",
+                        "Error BD al actualizar STOCK: cod_barra vacío (no se ejecutó UPDATE).",
+                        filaExcel, "STOCK"));
+                continue;
+            }
 
-            if (updated == 0) {
-                ventaRepository.save(v);
+            double su = v.getStockUnidades();
+            double sd = v.getStockDolares();
+
+            try {
+                int updated = entityManager.createNativeQuery(sqlUpd)
+                        .setParameter("su", su)
+                        .setParameter("sd", sd)
+                        .setParameter("cli", clienteId)
+                        .setParameter("anio", v.getAnio())
+                        .setParameter("mes", v.getMes())
+                        .setParameter("dia", v.getDia())
+                        .setParameter("cb", cb)
+                        .setParameter("cp", tienda)
+                        .executeUpdate();
+
+                if (updated == 0) {
+                    incidencias.add(new Incidencia(cb,
+                            "STOCK no actualizado: no existe venta en BD para hacer match (cliente/anio/mes/dia/cod_barra/cod_pdv).",
+                            filaExcel, "STOCK"));
+                }
+            } catch (Exception ex) {
+                String msg = (ex.getMessage() != null ? ex.getMessage() : ex.toString());
+                incidencias.add(new Incidencia(cb,
+                        "Error BD al actualizar STOCK. " +
+                                "Datos: cli=" + clienteId +
+                                " anio=" + v.getAnio() +
+                                " mes=" + v.getMes() +
+                                " dia=" + v.getDia() +
+                                " tienda=" + tienda +
+                                " su=" + su +
+                                " sd=" + sd +
+                                " | Detalle: " + msg,
+                        filaExcel, "STOCK"));
             }
 
             i++;
             if (i % BATCH == 0) {
-                ventaRepository.flush();
+                entityManager.flush();
                 entityManager.clear();
             }
         }
 
-        ventaRepository.flush();
+        entityManager.flush();
         entityManager.clear();
     }
 
     // ========================= Carga Excel RM (VENTAS + STOCK) =========================
+    // ✅ Ahora: se arma un MAP de STOCK y se inserta junto con VENTAS (NO stock=0)
+    @Transactional
     public Map<String, Object> cargarExcelRM(InputStream inputStream, String codCliente, String nombreArchivo) {
         long t0 = System.nanoTime();
 
@@ -473,7 +491,7 @@ public class RMService {
         try (Workbook wb = WorkbookFactory.create(inputStream)) {
 
             // ============================================================
-            // PRE-SCAN: recolectar TODOS los códigos (sin filtros de positivos)
+            // PRE-SCAN: recolectar TODOS los códigos (para cache SAP/productos)
             // ============================================================
             Set<String> codigosParaBuscar = new HashSet<>();
 
@@ -499,19 +517,23 @@ public class RMService {
             }
 
             Sheet shStock = wb.getSheet("STOCK");
+
+            // ✅ STOCK usa fecha_venta (NO fecha_corte)
             Integer headerStock = null;
             Map<String, Integer> hS = Map.of();
             Integer cFechaS = null, cTiendaS = null, cRefS = null, cUnS = null, cDolS = null;
 
             if (shStock != null) {
-                headerStock = findHeaderRow(shStock, Set.of("fecha_corte", "tienda", "ref_proveedor"), 30);
+                headerStock = findHeaderRow(shStock, Set.of("fecha_venta", "nombre_tienda", "ref_proveedor"), 30);
                 if (headerStock != null) {
                     hS = buildHeaderIndex(shStock, headerStock);
-                    cFechaS  = pick(hS, "fecha_corte");
-                    cTiendaS = pick(hS, "tienda", "nombre_tienda");
+
+                    cFechaS  = pick(hS, "fecha_venta");
+                    cTiendaS = pick(hS, "nombre_tienda", "tienda");
                     cRefS    = pick(hS, "ref_proveedor");
-                    cUnS     = pick(hS, "cantidad_unidades");
-                    cDolS    = pick(hS, "cantidad_dolares");
+
+                    cUnS  = pick(hS, "cantidad_unidades", "stock_unidades", "unidades");
+                    cDolS = pick(hS, "cantidad_dolares", "stock_dolares", "dolares", "usd");
 
                     for (int r = headerStock + 1; r <= shStock.getLastRowNum(); r++) {
                         Row row = shStock.getRow(r);
@@ -529,11 +551,70 @@ public class RMService {
             Map<String, Long> productoIdMap = new HashMap<>(findProductoIdsBatchByCodBarraSap(codigosParaBuscar));
 
             // ============================================================
-            // VENTAS
+            // 1) Construir MAP de STOCK por key (anio|mes|dia|cb|tienda)
             // ============================================================
+            Map<String, StockInfo> stockByKey = new HashMap<>(200_000);
+
+            if (shStock != null) {
+                if (headerStock == null) {
+                    incidencias.add(new Incidencia("GENERAL",
+                            "No se encontró encabezado de STOCK (requiere fecha_venta, nombre_tienda, ref_proveedor).",
+                            -1, "STOCK"));
+                } else {
+                    for (int r = headerStock + 1; r <= shStock.getLastRowNum(); r++) {
+                        Row row = shStock.getRow(r);
+                        if (row == null) continue;
+
+                        filasLeidasStock++;
+
+                        try {
+                            Date fecha = getDate(row, cFechaS);
+                            var zdt = (fecha != null)
+                                    ? fecha.toInstant().atZone(ZONE)
+                                    : LocalDate.now().atStartOfDay(ZONE);
+
+                            String tienda = tiendaKey(getString(row, cTiendaS));
+                            String codBarraSap = getString(row, cRefS);
+
+                            if (codBarraSap == null || codBarraSap.isBlank()) {
+                                incidencias.add(new Incidencia("CODBARRA_VACIO",
+                                        "ref_proveedor vacío. Fila omitida.",
+                                        r + 1, "STOCK"));
+                                continue;
+                            }
+
+                            String cb = codBarraSap.trim();
+
+                            Double su = getDouble(row, cUnS);
+                            Double sd = getDouble(row, cDolS);
+
+                            double suVal = (su != null && Double.isFinite(su)) ? su : 0d;
+                            double sdVal = (sd != null && Double.isFinite(sd)) ? sd : 0d;
+
+                            String key = zdt.getYear() + "|" + zdt.getMonthValue() + "|" + zdt.getDayOfMonth() + "|" + cb + "|" + tienda;
+
+                            // Si viene repetido, se queda el último (puedes cambiar a suma si deseas)
+                            stockByKey.put(key, new StockInfo(suVal, sdVal, r + 1));
+
+                            filasProcesadasStock++;
+
+                        } catch (Exception exFila) {
+                            incidencias.add(new Incidencia("ERROR_FILA",
+                                    "Error procesando fila: " + exFila.getMessage(),
+                                    r + 1, "STOCK"));
+                        }
+                    }
+                }
+            }
+
+            // ============================================================
+            // 2) VENTAS: insertar/actualizar ya con stock real (si existe en STOCK)
+            // ============================================================
+            Set<String> keysVentas = new HashSet<>(200_000);
+
             if (headerVentas == null) {
                 incidencias.add(new Incidencia("GENERAL",
-                        "No se encontró encabezado de VENTAS (requiere fecha_venta, Nombre_Tienda, REF_Proveedor).",
+                        "No se encontró encabezado de VENTAS (requiere fecha_venta, nombre_tienda, ref_proveedor).",
                         -1, "VENTAS"));
             } else {
                 List<Venta> buffer = new ArrayList<>(BUFFER_SIZE);
@@ -554,23 +635,21 @@ public class RMService {
                         String codBarraSap = getString(row, cRefV);
 
                         if (codBarraSap == null || codBarraSap.isBlank()) {
-                            // Si no hay codbarra, no podemos enlazar producto/llave -> se registra y se omite
                             codigosNoEncontrados.add("CODBARRA_VACIO");
-                            incidencias.add(new Incidencia("CODBARRA_VACIO", "REF_Proveedor vacío. Fila omitida.", r + 1, "VENTAS"));
+                            incidencias.add(new Incidencia("CODBARRA_VACIO",
+                                    "ref_proveedor vacío. Fila omitida.",
+                                    r + 1, "VENTAS"));
                             continue;
                         }
 
                         String cb = codBarraSap.trim();
-
                         Long productoId = productoIdMap.get(cb);
 
-                        // Si no existe en PRODUCTO -> buscar en SAP_Prod_cache y CREAR producto
                         if (productoId == null) {
-                            codigosNoEncontrados.add(cb); // registrar como no encontrado inicialmente
+                            codigosNoEncontrados.add(cb);
 
                             SapCacheRow sap = sapMap.get(cb);
                             if (sap != null) {
-                                // crear producto desde SAP
                                 productoId = crearProductoDesdeSapCache(cb, sap);
                                 productoIdMap.put(cb, productoId);
 
@@ -578,7 +657,6 @@ public class RMService {
                                         "No existía en PRODUCTO. Se creó desde SAP_Prod_cache con id=" + productoId,
                                         r + 1, "VENTAS"));
                             } else {
-                                // ni en SAP -> fallback
                                 productoId = PRODUCTO_FALLBACK_ID;
                                 incidencias.add(new Incidencia(cb,
                                         "No existe en PRODUCTO ni en SAP_Prod_cache. Se carga con PRODUCTO_FALLBACK_ID=" + PRODUCTO_FALLBACK_ID,
@@ -603,12 +681,27 @@ public class RMService {
                         v.setVentaDolares(ventaUsd != null ? ventaUsd : 0);
                         v.setVentaUnidad(ventaUds != null ? ventaUds : 0);
 
-                        // si existe en SAP, llena datos en Venta (sin bloquear)
                         SapCacheRow sapVenta = sapMap.get(cb);
                         if (sapVenta != null) aplicarDatosSapCache(v, sapVenta);
 
-                        v.setStockDolares(0);
-                        v.setStockUnidades(0);
+                        // ✅ AQUÍ el cambio: stock se toma del MAP de STOCK
+                        String key = v.getAnio() + "|" + v.getMes() + "|" + v.getDia() + "|" + cb + "|" + tienda;
+                        keysVentas.add(key);
+
+                        StockInfo st = stockByKey.get(key);
+                        if (st != null) {
+                            v.setStockUnidades(st.su);
+                            v.setStockDolares(st.sd);
+                        } else {
+                            // Si no hay stock, queda en 0 (pero ya es por ausencia real, no por diseño)
+                            v.setStockUnidades(0);
+                            v.setStockDolares(0);
+
+                            incidencias.add(new Incidencia(cb,
+                                    "No existe registro en hoja STOCK para esta venta (misma fecha_venta y tienda). Se insertó stock=0.",
+                                    r + 1, "VENTAS"));
+                        }
+
                         v.setUnidadesDiarias("0");
 
                         Producto p = new Producto();
@@ -634,105 +727,15 @@ public class RMService {
             }
 
             // ============================================================
-            // STOCK
+            // 3) Incidencias: STOCK sin match en VENTAS (para que se entienda qué faltó)
             // ============================================================
-            if (shStock != null) {
-                if (headerStock == null) {
-                    incidencias.add(new Incidencia("GENERAL",
-                            "No se encontró encabezado de STOCK (requiere fecha_corte, Tienda, REF_Proveedor).",
-                            -1, "STOCK"));
-                } else {
-                    List<Venta> bufferStock = new ArrayList<>(BUFFER_SIZE);
-
-                    for (int r = headerStock + 1; r <= shStock.getLastRowNum(); r++) {
-                        Row row = shStock.getRow(r);
-                        if (row == null) continue;
-
-                        filasLeidasStock++;
-
-                        try {
-                            Date fecha = getDate(row, cFechaS);
-                            var zdt = (fecha != null)
-                                    ? fecha.toInstant().atZone(ZONE)
-                                    : LocalDate.now().atStartOfDay(ZONE);
-
-                            String tienda = tiendaKey(getString(row, cTiendaS));
-                            String codBarraSap = getString(row, cRefS);
-
-                            if (codBarraSap == null || codBarraSap.isBlank()) {
-                                codigosNoEncontrados.add("CODBARRA_VACIO");
-                                incidencias.add(new Incidencia("CODBARRA_VACIO", "REF_Proveedor vacío. Fila omitida.", r + 1, "STOCK"));
-                                continue;
-                            }
-
-                            String cb = codBarraSap.trim();
-
-                            Long productoId = productoIdMap.get(cb);
-
-                            if (productoId == null) {
-                                codigosNoEncontrados.add(cb);
-
-                                SapCacheRow sap = sapMap.get(cb);
-                                if (sap != null) {
-                                    productoId = crearProductoDesdeSapCache(cb, sap);
-                                    productoIdMap.put(cb, productoId);
-
-                                    incidencias.add(new Incidencia(cb,
-                                            "No existía en PRODUCTO. Se creó desde SAP_Prod_cache con id=" + productoId,
-                                            r + 1, "STOCK"));
-                                } else {
-                                    productoId = PRODUCTO_FALLBACK_ID;
-                                    incidencias.add(new Incidencia(cb,
-                                            "No existe en PRODUCTO ni en SAP_Prod_cache. Se carga con PRODUCTO_FALLBACK_ID=" + PRODUCTO_FALLBACK_ID,
-                                            r + 1, "STOCK"));
-                                }
-                            }
-
-                            Double su = getDouble(row, cUnS);
-                            Double sd = getDouble(row, cDolS);
-
-                            Venta v = new Venta();
-                            v.setCliente(cliente);
-
-                            v.setAnio(zdt.getYear());
-                            v.setMes(zdt.getMonthValue());
-                            v.setDia(zdt.getDayOfMonth());
-
-                            v.setCodBarra(cb);
-                            v.setCodPdv(tienda);
-                            v.setPdv(tienda);
-
-                            v.setVentaDolares(0);
-                            v.setVentaUnidad(0);
-
-                            v.setStockUnidades(su != null ? su : 0);
-                            v.setStockDolares(sd != null ? sd : 0);
-
-                            SapCacheRow sapStock = sapMap.get(cb);
-                            if (sapStock != null) aplicarDatosSapCache(v, sapStock);
-
-                            v.setUnidadesDiarias("0");
-
-                            Producto p = new Producto();
-                            p.setId(productoId);
-                            v.setProducto(p);
-
-                            bufferStock.add(v);
-                            filasProcesadasStock++;
-
-                            if (bufferStock.size() >= BUFFER_SIZE) {
-                                upsertStockEnBloque(cliente.getId(), bufferStock);
-                                bufferStock.clear();
-                            }
-
-                        } catch (Exception exFila) {
-                            incidencias.add(new Incidencia("ERROR_FILA",
-                                    "Error procesando fila: " + exFila.getMessage(),
-                                    r + 1, "STOCK"));
-                        }
-                    }
-
-                    if (!bufferStock.isEmpty()) upsertStockEnBloque(cliente.getId(), bufferStock);
+            for (Map.Entry<String, StockInfo> e : stockByKey.entrySet()) {
+                String key = e.getKey();
+                if (!keysVentas.contains(key)) {
+                    StockInfo st = e.getValue();
+                    incidencias.add(new Incidencia("STOCK_SIN_VENTA",
+                            "Existe en STOCK pero no existe en VENTAS para la misma fecha_venta+tienda+ref_proveedor. No se insertó.",
+                            st.filaExcel, "STOCK"));
                 }
             }
 
@@ -789,20 +792,13 @@ public class RMService {
         if (cods == null || cods.isEmpty()) sb.append("Sin códigos no encontrados.\n");
         else cods.forEach(c -> sb.append(c).append('\n'));
 
-        sb.append("\nDETALLE_INCIDENCIAS").append('\n');
-        sb.append("HOJA\tFILA\tCODIGO\tMOTIVO\n");
+        sb.append("\nINCIDENCIAS_DETALLE").append('\n');
         if (incidencias == null || incidencias.isEmpty()) {
-            sb.append("Sin incidencias.\n");
+            sb.append("(sin incidencias)\n");
         } else {
-            for (Incidencia i : incidencias) {
-                sb.append(Objects.toString(i.hoja, ""))
-                  .append('\t')
-                  .append(i.fila)
-                  .append('\t')
-                  .append(Objects.toString(i.codigo, ""))
-                  .append('\t')
-                  .append(Objects.toString(i.motivo, ""))
-                  .append('\n');
+            for (int i = 0; i < incidencias.size(); i++) {
+                Incidencia inc = incidencias.get(i);
+                sb.append("  ").append(i + 1).append(". ").append(inc.toString()).append('\n');
             }
         }
 
@@ -818,7 +814,7 @@ public class RMService {
                 .contentLength(bytes.length)
                 .body(resource);
     }
- 
+
     // =====================================================================================
     // ===================================== CRUD RM =======================================
     // =====================================================================================
@@ -970,10 +966,9 @@ public class RMService {
     @Transactional
     public Venta actualizarVentaPorCodCliente(Long id, String codCliente, Venta nuevaVenta) {
         Cliente cliente = getClienteOrThrow(codCliente);
-        nuevaVenta.setCliente(cliente); // asegura cliente_id real
+        nuevaVenta.setCliente(cliente);
 
         return ventaRepository.findById(id).map(v -> {
-            // seguridad: solo permitir si pertenece al cliente RM
             if (v.getCliente() == null || v.getCliente().getCodCliente() == null ||
                 !codCliente.equalsIgnoreCase(v.getCliente().getCodCliente())) {
                 throw new RuntimeException("Venta no pertenece al cliente: " + codCliente);
@@ -1013,7 +1008,6 @@ public class RMService {
         return true;
     }
 
-    // ✅ DELETE MASIVO (solo borra ventas del cliente RM)
     @Transactional
     public Map<String, Object> eliminarVentasMasivo(List<Long> ids) {
         Map<String, Object> out = new LinkedHashMap<>();
@@ -1026,7 +1020,6 @@ public class RMService {
 
         Cliente cliente = getClienteOrThrow(DEFAULT_COD_CLIENTE);
 
-        // Traer solo las ventas que pertenezcan a RM
         List<Venta> ventas = ventaRepository.findAllById(ids);
         List<Venta> filtradas = ventas.stream()
                 .filter(v -> v != null
@@ -1061,10 +1054,12 @@ public class RMService {
         try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(os);
              java.io.OutputStreamWriter osw = new java.io.OutputStreamWriter(zip, java.nio.charset.StandardCharsets.UTF_8);
              java.io.BufferedWriter bw = new java.io.BufferedWriter(osw)) {
+
             zip.putNextEntry(new java.util.zip.ZipEntry("rm_ventas.csv"));
             bw.write("\uFEFF");
             bw.write("id,anio,mes,dia,marca,nombreProducto,codBarra,codigoSap,descripcion,codPdv,pdv,ciudad,stockDolares,stockUnidades,ventaDolares,ventaUnidad,codCliente,nombreCliente");
             bw.newLine();
+
             int pageSize = 10000;
             int offset = 0;
             while (true) {
@@ -1079,6 +1074,7 @@ public class RMService {
                 if (mes != null) sql.append("AND v.mes = :mes ");
                 if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
                 sql.append("ORDER BY v.anio DESC, v.mes DESC, v.dia DESC, v.id DESC ");
+
                 Query q = entityManager.createNativeQuery(sql.toString());
                 q.setParameter("cod", codCliente);
                 if (anio != null) q.setParameter("anio", anio);
@@ -1086,9 +1082,11 @@ public class RMService {
                 if (marca != null && !marca.isBlank()) q.setParameter("marca", marca.trim());
                 q.setFirstResult(offset);
                 q.setMaxResults(pageSize);
+
                 @SuppressWarnings("unchecked")
                 java.util.List<Object[]> rows = q.getResultList();
                 if (rows.isEmpty()) break;
+
                 for (Object[] r : rows) {
                     StringBuilder line = new StringBuilder();
                     line.append(toCsv(r[0])).append(',').append(toCsv(r[1])).append(',').append(toCsv(r[2])).append(',').append(toCsv(r[3])).append(',');
@@ -1104,6 +1102,7 @@ public class RMService {
             }
             bw.flush();
             zip.closeEntry();
+
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
