@@ -546,10 +546,18 @@ const TemplateGeneral = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
-      const qs = new URLSearchParams({
-        limit: "100000",
-      });
-      const { data } = await apiFetch(`/venta?${qs.toString()}`);
+      if (appliedFilters?.year == null || !Number.isFinite(appliedFilters.year)) {
+        showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+        setVentas([]);
+        return;
+      }
+      const params = new URLSearchParams();
+      params.set("anio", String(appliedFilters.year));
+      if (appliedFilters.month != null) params.set("mes", String(appliedFilters.month));
+      if (appliedFilters.marca) params.set("marca", appliedFilters.marca);
+      if (appliedFilters.cliente) params.set("codCliente", String(appliedFilters.cliente));
+      params.set("limit", "100000");
+      const { data } = await apiFetch(`/venta?${params.toString()}`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
@@ -581,8 +589,8 @@ const TemplateGeneral = () => {
         .sort((a, b) => a.value - b.value);
       setYearsOptions(opts);
     } catch {
-      const years = [...new Set(ventas.map((v) => v.anio))]
-        .filter(Number.isFinite)
+      const years = [...new Set(ventas.map((v) => Number(v.anio)))]
+        .filter((n) => Number.isFinite(n))
         .sort((a, b) => a - b);
       setYearsOptions(years.map((y) => ({ label: String(y), value: y })));
       showWarn("No se pudieron cargar los años desde API. Se usaron años del dataset.");
@@ -689,11 +697,18 @@ const TemplateGeneral = () => {
     });
 
   const fetchVentasWithFilters = async (f) => {
+    const y = Number(f?.year);
+    const m = f?.month != null ? Number(f.month) : null;
+    if (!Number.isFinite(y)) {
+      showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+      setVentas([]);
+      return;
+    }
     setLoadingVentas(true);
     try {
       const params = new URLSearchParams();
-      if (f.year !== null) params.set("anio", String(f.year));
-      if (f.month !== null) params.set("mes", String(f.month));
+      params.set("anio", String(y));
+      if (m !== null && Number.isFinite(m)) params.set("mes", String(m));
       if (f.marca) params.set("marca", f.marca);
       if (f.cliente) params.set("codCliente", String(f.cliente));
       if (f.dateFrom) {
@@ -731,7 +746,8 @@ const TemplateGeneral = () => {
 
   useEffect(() => {
     loadMarcas();
-    loadVentas();
+    loadYearsOptions();
+    loadClientesOptions();
   }, []);
 
   useEffect(() => {
@@ -1068,13 +1084,15 @@ const TemplateGeneral = () => {
   };
 
   const handleApplyFilters = async () => {
-    if (filterMonth !== null && filterYear === null) {
+    const y = filterYear != null ? Number(filterYear) : null;
+    const m = filterMonth != null ? Number(filterMonth) : null;
+    if (m !== null && y === null) {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");
       return;
     }
     const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
     const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
-    const newApplied = { year: filterYear, month: filterMonth, marca: filterMarca, cliente: filterCliente, dateFrom, dateTo };
+    const newApplied = { year: y, month: m, marca: filterMarca, cliente: filterCliente, dateFrom, dateTo };
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     await fetchVentasWithFilters(newApplied);

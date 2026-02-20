@@ -75,6 +75,8 @@ const Deprati = () => {
   const [filterDateRange, setFilterDateRange] = useState(null);
   const [marcas, setMarcas] = useState([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [yearsOptions, setYearsOptions] = useState([]);
+  const [monthsOptions, setMonthsOptions] = useState([]);
 
   // Paginación
   const [paginatorState, setPaginatorState] = useState({
@@ -87,7 +89,7 @@ const Deprati = () => {
 
   useEffect(() => {
     loadMarcas();
-    loadVentas();
+    loadYearsOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -192,6 +194,67 @@ const Deprati = () => {
       showError("Error al cargar ventas");
     } finally {
       setLoadingVentas(false);
+    }
+  };
+
+  const loadYearsOptions = async () => {
+    try {
+      const res = await fetch("/api-sellout/template-general/anios-disponibles", { signal: AbortSignal.timeout(300000) });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const list = (Array.isArray(data) ? data : [])
+        .map((y) => {
+          const n = Number(typeof y === "object" ? y?.anio ?? y?.year ?? y?.value : y);
+          return Number.isFinite(n) ? n : null;
+        })
+        .filter((n) => n !== null)
+        .sort((a, b) => a - b);
+      setYearsOptions(list.map((y) => ({ label: String(y), value: y })));
+    } catch {
+      const years = [...new Set(ventas.map((v) => v.anio))].filter(Number.isFinite).sort((a, b) => a - b);
+      setYearsOptions(years.map((y) => ({ label: String(y), value: y })));
+    }
+  };
+
+  const loadMonthsOptions = async (anio) => {
+    if (!Number.isFinite(Number(anio))) {
+      setMonthsOptions([]);
+      return;
+    }
+    try {
+      const qs = new URLSearchParams();
+      qs.set("anio", String(Number(anio)));
+      const res = await fetch(`/api-sellout/template-general/meses-disponibles?${qs.toString()}`, { signal: AbortSignal.timeout(300000) });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const raw = Array.isArray(data) ? data : [];
+      const months = raw
+        .map((item) => {
+          const m = Number(typeof item === "object" ? item?.mes ?? item?.month ?? item?.value : item);
+          return Number.isFinite(m) ? m : null;
+        })
+        .filter((m) => m && m >= 1 && m <= 12)
+        .sort((a, b) => a - b);
+      const monthsMap = [
+        { label: "Enero", value: 1 }, { label: "Febrero", value: 2 }, { label: "Marzo", value: 3 },
+        { label: "Abril", value: 4 }, { label: "Mayo", value: 5 }, { label: "Junio", value: 6 },
+        { label: "Julio", value: 7 }, { label: "Agosto", value: 8 }, { label: "Septiembre", value: 9 },
+        { label: "Octubre", value: 10 }, { label: "Noviembre", value: 11 }, { label: "Diciembre", value: 12 }
+      ];
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => monthsMap[m - 1]);
+      setMonthsOptions(opts);
+    } catch {
+      const months = [...new Set(ventas.filter((v) => Number(v.anio) === Number(anio)).map((v) => Number(v.mes)))]
+        .filter((m) => Number.isFinite(m) && m >= 1 && m <= 12)
+        .sort((a, b) => a - b);
+      const monthsMap = [
+        { label: "Enero", value: 1 }, { label: "Febrero", value: 2 }, { label: "Marzo", value: 3 },
+        { label: "Abril", value: 4 }, { label: "Mayo", value: 5 }, { label: "Junio", value: 6 },
+        { label: "Julio", value: 7 }, { label: "Agosto", value: 8 }, { label: "Septiembre", value: 9 },
+        { label: "Octubre", value: 10 }, { label: "Noviembre", value: 11 }, { label: "Diciembre", value: 12 }
+      ];
+      const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => monthsMap[m - 1]);
+      setMonthsOptions(opts);
     }
   };
 
@@ -518,6 +581,12 @@ const Deprati = () => {
 
   // ==== Filtros ====
   const handleApplyFilters = async () => {
+    if (!filterYear || !Number.isFinite(Number(filterYear))) {
+      showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+      setFilteredVentas([]);
+      setVentas([]);
+      return;
+    }
     setLoadingVentas(true);
     try {
       const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
@@ -551,6 +620,33 @@ const Deprati = () => {
       }));
       setFullDataLoaded(true);
       showInfo(`Se encontraron ${list.length} registros con los filtros aplicados`);
+    } catch (e) {
+      const filtered = (ventas || []).filter((item) => {
+        if (filterYear && Number(item.anio) !== Number(filterYear)) return false;
+        if (filterMonth && Number(item.mes) !== Number(filterMonth)) return false;
+        if (filterMarca && (item.marca ?? item?.producto?.marca) !== filterMarca) return false;
+        if (filterDateRange?.length) {
+          const [from, to] = filterDateRange;
+          const itemDate = new Date(Number(item.anio), Number(item.mes) - 1, Number(item.dia || 1));
+          if (from) {
+            const d = new Date(from);
+            const f = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            if (itemDate < f) return false;
+          }
+          if (to) {
+            const d = new Date(to);
+            const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            if (itemDate > t) return false;
+          }
+        }
+        return true;
+      });
+      filtered._fromApi = false;
+      setFilteredVentas(filtered);
+      setVentas(filtered);
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: filtered.length }));
+      showWarn("No se pudo conectar a la API. Aplicando filtros localmente...");
+      showInfo(`Se encontraron ${filtered.length} registros (filtro local).`);
     } finally {
       setLoadingVentas(false);
     }
@@ -994,8 +1090,12 @@ const Deprati = () => {
               <Dropdown
                 id="filterYear"
                 value={filterYear}
-                options={years.map((y) => ({ label: String(y), value: y }))}
-                onChange={(e) => setFilterYear(e.value)}
+                options={yearsOptions}
+                onChange={(e) => {
+                  setFilterYear(e.value);
+                  setFilterMonth("");
+                  loadMonthsOptions(e.value);
+                }}
                 placeholder="Seleccionar Año"
                 className="deprati-dropdown w-full"
               />
@@ -1007,7 +1107,7 @@ const Deprati = () => {
               <Dropdown
                 id="filterMonth"
                 value={filterMonth}
-                options={months}
+                options={monthsOptions}
                 onChange={(e) => setFilterMonth(e.value)}
                 placeholder="Seleccionar Mes"
                 className="deprati-dropdown w-full"

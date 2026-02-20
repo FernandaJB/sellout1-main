@@ -542,6 +542,11 @@ const RM = () => {
   const loadVentas = async () => {
     setLoadingVentas(true);
     try {
+      if (appliedFilters?.year == null || !Number.isFinite(appliedFilters.year)) {
+        showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+        setVentas([]);
+        return;
+      }
       const qs = buildQuery(appliedFilters);
       const { data } = await apiFetch(`/ventas?${qs}`);
       const list = Array.isArray(data) ? data : [];
@@ -559,10 +564,23 @@ const RM = () => {
   };
 
   const fetchVentasWithFilters = async (f) => {
+    const y = Number(f?.year);
+    const m = f?.month != null ? Number(f.month) : null;
+    if (!Number.isFinite(y)) {
+      showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+      setVentas([]);
+      return;
+    }
     setLoadingVentas(true);
     try {
-      const qs = buildQuery(f);
-      const { data } = await apiFetch(`/ventas?${qs}`);
+      const params = new URLSearchParams();
+      if (f.cliente) params.set("codCliente", String(f.cliente));
+      params.set("anio", String(y));
+      if (m !== null && Number.isFinite(m)) params.set("mes", String(m));
+      if (f.marca) params.set("marca", f.marca);
+      params.set("limit", "10000");
+      params.set("offset", "0");
+      const { data } = await apiFetch(`/ventas?${params.toString()}`);
       const list = Array.isArray(data) ? data : [];
       list._fromApi = true;
       setVentas(list);
@@ -583,7 +601,6 @@ const RM = () => {
 
   useEffect(() => {
     loadClientesOptions();
-    loadVentas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -593,8 +610,8 @@ const RM = () => {
 
   // ===== DataTable filtrada =====
   const filteredData = useMemo(() => {
-    let base = [...ventas];
-    if (hasAnyApplied && !base._fromApi) base = filterLocalData(base, appliedFilters);
+    let base = ventas;
+    if (hasAnyApplied && !base?._fromApi) base = filterLocalData(base, appliedFilters);
 
     if (globalFilter?.trim()) {
       const lowered = globalFilter.toLowerCase();

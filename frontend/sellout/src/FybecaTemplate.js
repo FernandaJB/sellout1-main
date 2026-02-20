@@ -462,7 +462,8 @@ const Fybeca = () => {
 
   const filterLocalData = (data, f) => {
     return (data || []).filter((item) => {
-      if ((item?.cliente?.codCliente || "").trim() !== COD_CLIENTE_FIJO) return false;
+      const cod = (item?.cliente?.codCliente ?? item?.codCliente ?? "").trim();
+      if (cod !== COD_CLIENTE_FIJO) return false;
       if (f.year !== null && Number(item.anio) !== Number(f.year)) return false;
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
@@ -483,9 +484,20 @@ const Fybeca = () => {
   };
 
   const fetchVentasWithFilters = async (f) => {
+    const y = Number(f?.year);
+    const m = f?.month != null ? Number(f.month) : null;
+    if (!Number.isFinite(y)) {
+      showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
+      setVentas([]);
+      return;
+    }
     setLoadingVentas(true);
     try {
-      const qs = new URLSearchParams(buildQuery(f));
+      const qs = new URLSearchParams();
+      qs.set("anio", String(y));
+      if (m !== null && Number.isFinite(m)) qs.set("mes", String(m));
+      if (f.marca) qs.set("marca", f.marca);
+      qs.set("codCliente", COD_CLIENTE_FIJO);
       // Traer todos los datos para paginación del lado del cliente
       qs.set("limit", "100000");
       const { data } = await apiFetch(`/venta?${qs.toString()}`);
@@ -514,7 +526,7 @@ const Fybeca = () => {
   // ===== efectos =====
   useEffect(() => {
     loadMarcas();
-    loadVentasPage();
+    loadYearsOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -559,8 +571,8 @@ const Fybeca = () => {
   const filteredData = useMemo(() => {
     if (!showAll && !hasAnyApplied && !(globalFilter?.trim())) return [];
 
-    let base = [...ventas];
-    if (!showAll && hasAnyApplied && !base._fromApi) base = filterLocalData(base, appliedFilters);
+    let base = ventas;
+    if (!showAll && hasAnyApplied && !base?._fromApi) base = filterLocalData(base, appliedFilters);
 
     if (globalFilter?.trim()) {
       const lowered = globalFilter.toLowerCase();
@@ -943,7 +955,7 @@ const Fybeca = () => {
     setAppliedFilters(newApplied);
     setGlobalFilter("");
     setShowAll(false);
-    showSuccess("Filtros aplicados correctamente.");
+    fetchVentasWithFilters(newApplied);
   };
 
   const handleClearFilters = () => {
