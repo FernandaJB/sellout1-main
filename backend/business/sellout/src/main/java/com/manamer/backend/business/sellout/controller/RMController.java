@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -107,19 +109,38 @@ public class RMController {
             @RequestParam(value = "anio", required = false) Integer anio,
             @RequestParam(value = "mes", required = false) Integer mes,
             @RequestParam(value = "marca", required = false) String marca,
+            @RequestParam(value = "fechaDesde", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(value = "fechaHasta", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
             @RequestParam(value = "limit", required = false) Integer limit,
             @RequestParam(value = "offset", required = false) Integer offset
     ) {
         try {
-            log.info("[RM] GET /ventas codCliente={} anio={} mes={} marca={} limit={} offset={}",
-                    codCliente, anio, mes, marca, limit, offset);
+            log.info("[RM] GET /ventas codCliente={} anio={} mes={} marca={} fechaDesde={} fechaHasta={} limit={} offset={}",
+                    codCliente, anio, mes, marca, fechaDesde, fechaHasta, limit, offset);
 
-            // ✅ Firmas disponibles en RMService:
-            // - obtenerVentasResumen(Integer anio, Integer mes, String marca, Integer limit, Integer offset)
-            // - obtenerVentasResumenPorCodCliente(String codCliente, Integer anio, Integer mes, String marca, Integer limit, Integer offset)
             String cod = resolveCodCliente(codCliente);
 
-            List<Map<String, Object>> ventas = rmService.obtenerVentasTodasPorCodCliente(cod, anio, mes, marca);
+            if (mes != null && anio == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "ok", false,
+                        "error", "Para filtrar por mes, debes enviar también el año."
+                ));
+            }
+
+            boolean sinFiltros = anio == null
+                    && mes == null
+                    && (marca == null || marca.isBlank())
+                    && fechaDesde == null
+                    && fechaHasta == null;
+            if (sinFiltros) {
+                return ResponseEntity.ok(List.of());
+            }
+
+            List<Map<String, Object>> ventas = rmService.obtenerVentasResumenPorCodCliente(
+                    cod, anio, mes, marca, fechaDesde, fechaHasta, limit, offset
+            );
 
             return ResponseEntity.ok(ventas);
 
@@ -130,6 +151,27 @@ public class RMController {
                     "error", "Error al obtener ventas: " + e.getMessage()
             ));
         }
+    }
+
+    @GetMapping("/marcas-ventas")
+    public ResponseEntity<List<String>> obtenerMarcasDisponibles(@RequestParam(required = false) String codCliente) {
+        String cod = resolveCodCliente(codCliente);
+        return ResponseEntity.ok(rmService.obtenerMarcasDisponibles(cod));
+    }
+
+    @GetMapping("/anios-disponibles")
+    public ResponseEntity<List<Integer>> obtenerAniosDisponibles(@RequestParam(required = false) String codCliente) {
+        String cod = resolveCodCliente(codCliente);
+        return ResponseEntity.ok(rmService.obtenerAniosDisponibles(cod));
+    }
+
+    @GetMapping("/meses-disponibles")
+    public ResponseEntity<List<Integer>> obtenerMesesDisponibles(
+            @RequestParam(required = false) Integer anio,
+            @RequestParam(required = false) String codCliente
+    ) {
+        String cod = resolveCodCliente(codCliente);
+        return ResponseEntity.ok(rmService.obtenerMesesDisponibles(cod, anio));
     }
 
     @GetMapping("/reporte-ventas")

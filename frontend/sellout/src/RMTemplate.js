@@ -501,6 +501,39 @@ const RM = () => {
     }
   };
 
+  const fallbackYearsOptions = () => {
+    const y = new Date().getFullYear();
+    const years = Array.from({ length: 8 }, (_, i) => y - i).filter((n) => Number.isFinite(n));
+    setYearsOptions(years.map((v) => ({ label: String(v), value: v })));
+  };
+
+  const loadYearsOptions = async (codCliente) => {
+    try {
+      const qs = new URLSearchParams();
+      if (codCliente) qs.set("codCliente", String(codCliente));
+      const { data } = await apiFetch(`/anios-disponibles${qs.toString() ? `?${qs.toString()}` : ""}`);
+      const list = Array.isArray(data) ? data : [];
+      const years = list.map((n) => Number(n)).filter(Number.isFinite).sort((a, b) => a - b);
+      if (!years.length) return fallbackYearsOptions();
+      setYearsOptions(years.map((v) => ({ label: String(v), value: v })));
+    } catch {
+      fallbackYearsOptions();
+    }
+  };
+
+  const loadMarcasOptions = async (codCliente) => {
+    try {
+      const qs = new URLSearchParams();
+      if (codCliente) qs.set("codCliente", String(codCliente));
+      const { data } = await apiFetch(`/marcas-ventas${qs.toString() ? `?${qs.toString()}` : ""}`);
+      const list = Array.isArray(data) ? data : [];
+      const out = list.map((s) => String(s || "").trim()).filter(Boolean);
+      setMarcas(out);
+    } catch {
+      setMarcas([]);
+    }
+  };
+
   const rebuildFilterOptionsFromVentas = (list) => {
     const years = [...new Set((list || []).map((v) => Number(v?.anio)).filter(Number.isFinite))].sort((a, b) => a - b);
     setYearsOptions(years.map((y) => ({ label: String(y), value: y })));
@@ -525,39 +558,27 @@ const RM = () => {
       setMonthsOptions([]);
       return;
     }
-    const months = [
-      ...new Set(ventas.filter((v) => Number(v.anio) === Number(anio)).map((v) => Number(v.mes))),
-    ]
-      .filter((m) => Number.isFinite(m) && m >= 1 && m <= 12)
-      .sort((a, b) => a - b);
-
-    const opts = (months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1)).map((m) => ({
-      label: monthLabel(m),
-      value: m,
-    }));
-    setMonthsOptions(opts);
-  };
-
-  // ===== carga ventas =====
-  const loadVentas = async () => {
-    setLoadingVentas(true);
     try {
-      const qs = buildQuery(appliedFilters);
-      const { data } = await apiFetch(`/ventas?${qs}`);
+      const qs = new URLSearchParams();
+      qs.set("anio", String(anio));
+      if (filterCliente) qs.set("codCliente", String(filterCliente));
+      const { data } = await apiFetch(`/meses-disponibles?${qs.toString()}`);
       const list = Array.isArray(data) ? data : [];
-      list._fromApi = true;
-      setVentas(list);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: list.length }));
-      rebuildFilterOptionsFromVentas(list);
-    } catch (e) {
-      showError(String(e));
-      setVentas([]);
-      setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
-    } finally {
-      setLoadingVentas(false);
+      const months = list.map((n) => Number(n)).filter((m) => Number.isFinite(m) && m >= 1 && m <= 12).sort((a, b) => a - b);
+      const src = months.length ? months : Array.from({ length: 12 }, (_, i) => i + 1);
+      setMonthsOptions(src.map((m) => ({ label: monthLabel(m), value: m })));
+    } catch {
+      const src = Array.from({ length: 12 }, (_, i) => i + 1);
+      setMonthsOptions(src.map((m) => ({ label: monthLabel(m), value: m })));
     }
   };
 
+  const clearVentas = () => {
+    setVentas([]);
+    setPaginatorState((p) => ({ ...p, first: 0, page: 0, totalRecords: 0 }));
+  };
+
+  // ===== carga ventas =====
   const fetchVentasWithFilters = async (f) => {
     setLoadingVentas(true);
     try {
@@ -583,7 +604,9 @@ const RM = () => {
 
   useEffect(() => {
     loadClientesOptions();
-    loadVentas();
+    loadYearsOptions();
+    loadMarcasOptions();
+    clearVentas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -725,7 +748,8 @@ const RM = () => {
       setLogDetalladoTxt(detailed);
       setLogDetalladoName(`log_detallado_rm_${fechaStr}.txt`);
 
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+      if (hasAnyApplied) await fetchVentasWithFilters(appliedFilters);
+      else clearVentas();
 
       toast.current?.show({
         severity: (!ok || counts.conError) ? "warn" : "success",
@@ -823,7 +847,8 @@ const RM = () => {
       });
       showSuccess("Venta actualizada correctamente");
       setEditVenta(null);
-      await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+      if (hasAnyApplied) await fetchVentasWithFilters(appliedFilters);
+      else clearVentas();
     } catch (e) {
       showError(String(e));
     }
@@ -844,7 +869,8 @@ const RM = () => {
           if (appliedFilters?.cliente) qs.set("codCliente", String(appliedFilters.cliente));
           await apiFetch(`/venta/${id}${qs.toString() ? `?${qs.toString()}` : ""}`, { method: "DELETE" });
           showSuccess("Venta eliminada correctamente");
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+          if (hasAnyApplied) await fetchVentasWithFilters(appliedFilters);
+          else clearVentas();
         } catch (e) {
           showError(String(e));
         }
@@ -881,7 +907,8 @@ const RM = () => {
           }
           showSuccess("Ventas eliminadas correctamente");
           setSelectedVentas([]);
-          await (hasAnyApplied ? fetchVentasWithFilters(appliedFilters) : loadVentas());
+          if (hasAnyApplied) await fetchVentasWithFilters(appliedFilters);
+          else clearVentas();
         } catch (e) {
           showError("Error al eliminar las ventas");
         }
@@ -957,6 +984,10 @@ const RM = () => {
       showWarn("Para filtrar por Mes, selecciona primero un Año.");
       return;
     }
+    if (filterYear === null) {
+      showWarn("Selecciona un Año antes de aplicar el filtro.");
+      return;
+    }
     const dateFrom = Array.isArray(filterDateRange) ? filterDateRange[0] : null;
     const dateTo = Array.isArray(filterDateRange) ? filterDateRange[1] : null;
 
@@ -982,7 +1013,9 @@ const RM = () => {
     setGlobalFilter("");
     setMonthsOptions([]);
     setAppliedFilters({ year: null, month: null, marca: "", cliente: null, dateFrom: null, dateTo: null });
-    await loadVentas();
+    await loadYearsOptions();
+    await loadMarcasOptions();
+    clearVentas();
     showInfo("Filtros limpiados correctamente.");
   };
 
@@ -1150,7 +1183,15 @@ const RM = () => {
                       id="filterCliente"
                       value={filterCliente}
                       options={clientesOptions}
-                      onChange={(e) => setFilterCliente(e.value)}
+                      onChange={async (e) => {
+                        const cli = e.value || null;
+                        setFilterCliente(cli);
+                        setFilterYear(null);
+                        setFilterMonth(null);
+                        setMonthsOptions([]);
+                        await loadYearsOptions(cli);
+                        await loadMarcasOptions(cli);
+                      }}
                       placeholder="Seleccionar Cliente"
                       className="deprati-dropdown w-16rem"
                     />
