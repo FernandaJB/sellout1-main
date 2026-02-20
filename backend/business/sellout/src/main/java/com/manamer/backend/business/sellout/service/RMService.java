@@ -819,6 +819,51 @@ public class RMService {
     // ===================================== CRUD RM =======================================
     // =====================================================================================
 
+    public List<String> obtenerMarcasDisponibles(String codCliente) {
+        String sql = "SELECT DISTINCT v.marca FROM venta v " +
+                     "JOIN cliente c ON c.id = v.cliente_id " +
+                     "WHERE c.cod_Cliente = :cod " +
+                     "AND v.marca IS NOT NULL AND v.marca <> '' " +
+                     "ORDER BY v.marca";
+        Query q = entityManager.createNativeQuery(sql);
+        q.setParameter("cod", codCliente);
+        @SuppressWarnings("unchecked")
+        List<String> res = q.getResultList();
+        return res;
+    }
+
+    public List<Integer> obtenerAniosDisponibles(String codCliente) {
+        String sql = "SELECT DISTINCT v.anio FROM venta v " +
+                     "JOIN cliente c ON c.id = v.cliente_id " +
+                     "WHERE c.cod_Cliente = :cod " +
+                     "AND v.anio IS NOT NULL " +
+                     "ORDER BY v.anio";
+        Query q = entityManager.createNativeQuery(sql);
+        q.setParameter("cod", codCliente);
+        @SuppressWarnings("unchecked")
+        List<Integer> res = q.getResultList();
+        return res;
+    }
+
+    public List<Integer> obtenerMesesDisponibles(String codCliente, Integer anio) {
+        String sql = "SELECT DISTINCT v.mes FROM venta v " +
+                     "JOIN cliente c ON c.id = v.cliente_id " +
+                     "WHERE c.cod_Cliente = :cod " +
+                     "AND v.mes IS NOT NULL ";
+        if (anio != null) {
+            sql += "AND v.anio = :anio ";
+        }
+        sql += "ORDER BY v.mes";
+        
+        Query q = entityManager.createNativeQuery(sql);
+        q.setParameter("cod", codCliente);
+        if (anio != null) q.setParameter("anio", anio);
+        
+        @SuppressWarnings("unchecked")
+        List<Integer> res = q.getResultList();
+        return res;
+    }
+
     public List<Map<String, Object>> obtenerVentasResumen(
             Integer anio,
             Integer mes,
@@ -826,7 +871,7 @@ public class RMService {
             Integer limit,
             Integer offset
     ) {
-        return obtenerVentasResumenPorCodCliente(DEFAULT_COD_CLIENTE, anio, mes, marca, limit, offset);
+        return obtenerVentasResumenPorCodCliente(DEFAULT_COD_CLIENTE, anio, mes, marca, null, null, limit, offset);
     }
 
     public List<Map<String, Object>> obtenerVentasResumenPorCodCliente(
@@ -834,6 +879,8 @@ public class RMService {
             Integer anio,
             Integer mes,
             String marca,
+            LocalDate fechaDesde,
+            LocalDate fechaHasta,
             Integer limit,
             Integer offset
     ) {
@@ -851,6 +898,8 @@ public class RMService {
         if (anio != null) sql.append("AND v.anio = :anio ");
         if (mes != null) sql.append("AND v.mes = :mes ");
         if (marca != null && !marca.isBlank()) sql.append("AND v.marca = :marca ");
+        if (fechaDesde != null) sql.append("AND DATEFROMPARTS(v.anio, v.mes, v.dia) >= :fechaDesde ");
+        if (fechaHasta != null) sql.append("AND DATEFROMPARTS(v.anio, v.mes, v.dia) <= :fechaHasta ");
 
         sql.append("ORDER BY v.anio DESC, v.mes DESC, v.dia DESC, v.id DESC ")
            .append("OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY");
@@ -860,6 +909,8 @@ public class RMService {
         if (anio != null) q.setParameter("anio", anio);
         if (mes != null) q.setParameter("mes", mes);
         if (marca != null && !marca.isBlank()) q.setParameter("marca", marca.trim());
+        if (fechaDesde != null) q.setParameter("fechaDesde", java.sql.Date.valueOf(fechaDesde));
+        if (fechaHasta != null) q.setParameter("fechaHasta", java.sql.Date.valueOf(fechaHasta));
         q.setParameter("offset", offset);
         q.setParameter("limit", limit);
 
@@ -889,6 +940,17 @@ public class RMService {
             out.add(m);
         }
         return out;
+    }
+
+    public List<Map<String, Object>> obtenerVentasResumenPorCodCliente(
+            String codCliente,
+            Integer anio,
+            Integer mes,
+            String marca,
+            Integer limit,
+            Integer offset
+    ) {
+        return obtenerVentasResumenPorCodCliente(codCliente, anio, mes, marca, null, null, limit, offset);
     }
 
     public List<Map<String, Object>> obtenerVentasTodasPorCodCliente(
@@ -1059,7 +1121,6 @@ public class RMService {
             bw.write("\uFEFF");
             bw.write("id,anio,mes,dia,marca,nombreProducto,codBarra,codigoSap,descripcion,codPdv,pdv,ciudad,stockDolares,stockUnidades,ventaDolares,ventaUnidad,codCliente,nombreCliente");
             bw.newLine();
-
             int pageSize = 10000;
             int offset = 0;
             while (true) {
