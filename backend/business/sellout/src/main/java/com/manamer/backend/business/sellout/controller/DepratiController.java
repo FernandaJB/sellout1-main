@@ -6,6 +6,7 @@ import com.manamer.backend.business.sellout.models.Producto;
 import com.manamer.backend.business.sellout.models.TipoMueble;
 import com.manamer.backend.business.sellout.models.Venta;
 import com.manamer.backend.business.sellout.service.ClienteService;
+import com.manamer.backend.business.sellout.service.DepratiReportService;
 import com.manamer.backend.business.sellout.service.DepratiVentaService;
 import com.manamer.backend.business.sellout.service.ProductoService;
 import com.manamer.backend.business.sellout.service.TipoMuebleService;
@@ -118,6 +119,7 @@ public class DepratiController {
     // ======== Services ========
     private final DepratiVentaService depratiVentaService;
     private final TipoMuebleService tipoMuebleService;
+    private final DepratiReportService depratiReportService;
     private final ClienteService clienteService;
     private final ProductoService productoService;
     private final VentaService ventaService;
@@ -125,11 +127,13 @@ public class DepratiController {
     @Autowired
     public DepratiController(DepratiVentaService depratiVentaService,
                              TipoMuebleService tipoMuebleService,
+                             DepratiReportService depratiReportService,
                              ClienteService clienteService,
                              ProductoService productoService,
                              VentaService ventaService) {
         this.depratiVentaService = depratiVentaService;
         this.tipoMuebleService = tipoMuebleService;
+        this.depratiReportService = depratiReportService;
         this.clienteService = clienteService;
         this.productoService = productoService;
         this.ventaService = ventaService;
@@ -344,32 +348,7 @@ public class DepratiController {
     @GetMapping("/reporte-tipo-mueble")
     public ResponseEntity<Resource> reporteTipoMueble() {
         try {
-            var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
-            var sheet = wb.createSheet("TipoMueble");
-            int rowIdx = 0;
-
-            var header = sheet.createRow(rowIdx++);
-            String[] cols = {"ID","CodCliente","NombreCliente","Ciudad","CodPDV","NombrePDV","TipoMuebleEssence","Marca"};
-            for (int i = 0; i < cols.length; i++) header.createCell(i).setCellValue(cols[i]);
-
-            var data = tipoMuebleService.obtenerTodosLosTiposMuebleDeprati();
-            for (var tm : data) {
-                var r = sheet.createRow(rowIdx++);
-                r.createCell(0).setCellValue(tm.getId() != null ? tm.getId() : 0);
-                r.createCell(1).setCellValue(tm.getCliente()!=null? String.valueOf(tm.getCliente().getCodCliente()):"");
-                r.createCell(2).setCellValue(tm.getCliente()!=null? String.valueOf(tm.getCliente().getNombreCliente()):"");
-                r.createCell(3).setCellValue(tm.getCiudad()!=null? tm.getCiudad():"");
-                r.createCell(4).setCellValue(tm.getCodPdv()!=null? tm.getCodPdv():"");
-                r.createCell(5).setCellValue(tm.getNombrePdv()!=null? tm.getNombrePdv():"");
-                r.createCell(6).setCellValue(tm.getTipoMuebleEssence()!=null? tm.getTipoMuebleEssence():"");
-                r.createCell(7).setCellValue(tm.getMarca()!=null? tm.getMarca():"");
-            }
-            for (int i = 0; i < cols.length; i++) sheet.autoSizeColumn(i);
-
-            var baos = new java.io.ByteArrayOutputStream();
-            wb.write(baos);
-            wb.close();
-            byte[] bytes = baos.toByteArray();
+            byte[] bytes = depratiReportService.generarReporteTipoMuebleXlsx();
 
             var resource = new org.springframework.core.io.InputStreamResource(new java.io.ByteArrayInputStream(bytes));
             String filename = "reporte_tipo_mueble.xlsx";

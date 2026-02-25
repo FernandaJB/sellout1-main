@@ -15,10 +15,6 @@ import { Divider } from "primereact/divider";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Calendar } from "primereact/calendar";
 import { InputNumber } from "primereact/inputnumber";
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
 
 // ================= API base y helper fetch =================
 const API_BASE = "/api-sellout/template-general";
@@ -453,6 +449,7 @@ async function fetchAllVentas({ basePath = "/venta", query = {}, timeoutMs = 120
 const TemplateGeneral = () => {
   const toast = useRef(null);
   const fileInputRef = useRef(null);
+  const clienteIdByCodRef = useRef(new Map());
 
   const [ventas, setVentas] = useState([]);
   const [loadingVentas, setLoadingVentas] = useState(false);
@@ -555,10 +552,11 @@ const TemplateGeneral = () => {
       params.set("anio", String(appliedFilters.year));
       if (appliedFilters.month != null) params.set("mes", String(appliedFilters.month));
       if (appliedFilters.marca) params.set("marca", appliedFilters.marca);
-      if (appliedFilters.cliente) params.set("codCliente", String(appliedFilters.cliente));
       params.set("limit", "100000");
       const { data } = await apiFetch(`/venta?${params.toString()}`);
-      const list = Array.isArray(data) ? data : [];
+      const listAll = Array.isArray(data) ? data : [];
+      const cod = appliedFilters?.cliente ? String(appliedFilters.cliente).trim() : "";
+      const list = cod ? listAll.filter((item) => String(item?.codCliente ?? item?.cliente?.codCliente ?? "").trim() === cod) : listAll;
       list._fromApi = true;
       setVentas(list);
       setPaginatorState((p) => ({
@@ -577,9 +575,14 @@ const TemplateGeneral = () => {
     }
   };
 
-  const loadYearsOptions = async () => {
+  const loadYearsOptions = async (codCliente) => {
     try {
-      const { data } = await apiFetch("/anios-disponibles");
+      const qs = new URLSearchParams();
+      if (codCliente) {
+        const cid = clienteIdByCodRef.current.get(String(codCliente)) ?? null;
+        if (cid != null) qs.set("clienteId", String(cid));
+      }
+      const { data } = await apiFetch(`/anios-disponibles${qs.toString() ? `?${qs.toString()}` : ""}`);
       const opts = (data || [])
         .map((y) => {
           const n = Number(typeof y === "object" ? y?.anio ?? y?.year ?? y?.value : y);
@@ -605,6 +608,10 @@ const TemplateGeneral = () => {
     try {
       const qs = new URLSearchParams();
       qs.set("anio", String(anio));
+      if (filterCliente) {
+        const cid = clienteIdByCodRef.current.get(String(filterCliente)) ?? null;
+        if (cid != null) qs.set("clienteId", String(cid));
+      }
       const { data } = await apiFetch(`/meses-disponibles?${qs.toString()}`);
       const raw = Array.isArray(data) ? data : [];
       const months = raw
@@ -637,6 +644,12 @@ const TemplateGeneral = () => {
       if (!res.ok) throw new Error("No se pudo cargar la lista de clientes");
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
+      clienteIdByCodRef.current.clear();
+      list.forEach((c) => {
+        const cod = c?.codCliente ?? c?.cod_Cliente ?? null;
+        const id = c?.id ?? null;
+        if (cod && id != null) clienteIdByCodRef.current.set(String(cod), id);
+      });
       const opts = list
         .map((c) => {
           const cod = c?.codCliente ?? c?.cod_Cliente ?? c?.cliente ?? c?.codigo ?? null;
@@ -646,7 +659,7 @@ const TemplateGeneral = () => {
           return { label, value: String(cod) };
         })
         .filter(Boolean);
-      setClientesOptions(opts);
+      setClientesOptions([{ label: "Todos", value: null }, ...opts]);
     } catch {
       const map = new Map();
       ventas.forEach((v) => {
@@ -655,7 +668,7 @@ const TemplateGeneral = () => {
         if (code) map.set(String(code), name ? String(name) : String(code));
       });
       setClientesOptions(
-        Array.from(map.entries()).map(([value, label]) => ({ label: `${value} - ${label}`, value }))
+        [{ label: "Todos", value: null }, ...Array.from(map.entries()).map(([value, label]) => ({ label: `${value} - ${label}`, value }))]
       );
     }
   };
@@ -677,8 +690,8 @@ const TemplateGeneral = () => {
       if (f.month !== null && Number(item.mes) !== Number(f.month)) return false;
       if (f.marca && (item.marca ?? item?.producto?.marca) !== f.marca) return false;
       if (f.cliente) {
-        const cod = item.codCliente ?? (item.cliente ? item.cliente.codCliente : null);
-        if (!cod || String(cod) !== String(f.cliente)) return false;
+        const cod = String(item?.codCliente ?? item?.cliente?.codCliente ?? "").trim();
+        if (!cod || cod !== String(f.cliente).trim()) return false;
       }
       if (f.dateFrom || f.dateTo) {
         const itemDate = new Date(Number(item.anio), Number(item.mes) - 1, Number(item.dia || 1));
@@ -697,32 +710,59 @@ const TemplateGeneral = () => {
     });
 
   const fetchVentasWithFilters = async (f) => {
-    const y = Number(f?.year);
+    const y = f?.year != null ? Number(f.year) : null;
     const m = f?.month != null ? Number(f.month) : null;
-    if (!Number.isFinite(y)) {
-      showWarn("Seleccione un año (y opcional mes) para cargar ventas.");
-      setVentas([]);
+    const cod = f?.cliente ? String(f.cliente).trim() : "";
+
+    if (m != null && (y == null || !Number.isFinite(y))) {
+      showWarn("Para filtrar por Mes, selecciona primero un Año.");
       return;
     }
+
+    if ((y == null || !Number.isFinite(y)) && !cod) {
+      showWarn("Seleccione un Año o un Cliente para cargar ventas.");
+      setVentas([]);
+      setPaginatorState((prev) => ({ ...prev, first: 0, page: 0, totalRecords: 0 }));
+      return;
+    }
+
     setLoadingVentas(true);
     try {
-      const params = new URLSearchParams();
-      params.set("anio", String(y));
-      if (m !== null && Number.isFinite(m)) params.set("mes", String(m));
-      if (f.marca) params.set("marca", f.marca);
-      if (f.cliente) params.set("codCliente", String(f.cliente));
-      if (f.dateFrom) {
-        const d = new Date(f.dateFrom);
-        params.set("fechaDesde", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-      }
-      if (f.dateTo) {
-        const d = new Date(f.dateTo);
-        params.set("fechaHasta", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
-      }
-      params.set("limit", "100000");
+      let list = [];
 
-      const { data } = await apiFetch(`/venta?${params.toString()}`);
-      const list = Array.isArray(data) ? data : [];
+      if (y == null || !Number.isFinite(y)) {
+        try {
+          list = await fetchAllVentas({ query: { codCliente: cod, marca: f.marca || null } });
+        } catch {
+          list = [];
+        }
+
+        if (!Array.isArray(list)) list = [];
+        if (cod && list.length === 0) {
+          const listAll = await fetchAllVentas({ query: { marca: f.marca || null } });
+          const safeAll = Array.isArray(listAll) ? listAll : [];
+          list = safeAll.filter((item) => String(item?.codCliente ?? item?.cliente?.codCliente ?? "").trim() === cod);
+        }
+
+        if (f?.dateFrom || f?.dateTo) {
+          list = filterLocalData(list, { ...f, year: null, month: null, cliente: cod || null });
+        }
+      } else {
+        const params = new URLSearchParams();
+        params.set("anio", String(y));
+        if (m !== null && Number.isFinite(m)) params.set("mes", String(m));
+        if (f.marca) params.set("marca", f.marca);
+        params.set("limit", "100000");
+
+        const { data } = await apiFetch(`/venta?${params.toString()}`);
+        const listAll = Array.isArray(data) ? data : [];
+        list = cod ? listAll.filter((item) => String(item?.codCliente ?? item?.cliente?.codCliente ?? "").trim() === cod) : listAll;
+
+        if (f?.dateFrom || f?.dateTo) {
+          list = filterLocalData(list, { ...f, cliente: cod || null });
+        }
+      }
+
       list._fromApi = true;
       setVentas(list);
       setPaginatorState((prev) => ({
@@ -751,8 +791,8 @@ const TemplateGeneral = () => {
   }, []);
 
   useEffect(() => {
-    loadYearsOptions();
-  }, [ventas?.length]);
+    loadYearsOptions(filterCliente);
+  }, [filterCliente]);
 
   useEffect(() => {
     loadClientesOptions();
@@ -1275,7 +1315,12 @@ const TemplateGeneral = () => {
                       id="filterCliente"
                       value={filterCliente}
                       options={clientesOptions}
-                      onChange={(e) => setFilterCliente(e.value)}
+                      showClear
+                      onChange={async (e) => {
+                        const cli = e.value ?? null;
+                        setFilterCliente(cli);
+                        await loadYearsOptions(cli);
+                      }}
                       placeholder="Seleccionar Cliente"
                       className="deprati-dropdown w-16rem"
                     />

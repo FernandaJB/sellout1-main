@@ -1,9 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
 import "./css/deprati.css";
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 import { Toast } from "primereact/toast";
 import { ProgressSpinner } from "primereact/progressspinner";
@@ -22,6 +18,8 @@ import { Divider } from 'primereact/divider';
 import { ConfirmDialog, confirmDialog } from 'primereact/confirmdialog';
 import { Message } from 'primereact/message';
 import { Paginator } from 'primereact/paginator';
+
+const COD_CLIENTE_FIJO = "MZCL-000009";
 
 const DepratiTipoMueble = () => {
   // Referencias para los mensajes toast
@@ -55,15 +53,16 @@ const DepratiTipoMueble = () => {
      setLoading(true);
       setError("");
       try {
-        const response = await fetch("/api-sellout/deprati/tipo-mueble?codCliente=MZCL-000009");
+        const response = await fetch(`/api-sellout/deprati/tipo-mueble?codCliente=${encodeURIComponent(COD_CLIENTE_FIJO)}`);
         if (!response.ok) throw new Error(`Error al cargar tipos de mueble: ${response.statusText}`);
 
         const data = await response.json();
-        setTipoMuebles(data);
-        setFilteredTipoMuebles(data);
+        const list = (Array.isArray(data) ? data : []).filter((tm) => String(tm?.cliente?.codCliente ?? "").trim() === COD_CLIENTE_FIJO);
+        setTipoMuebles(list);
+        setFilteredTipoMuebles(list);
         setPaginatorState(prevState => ({
           ...prevState,
-          totalRecords: data.length
+          totalRecords: list.length
         }));
       } catch (error) {
         setError(error.message);
@@ -147,10 +146,11 @@ const DepratiTipoMueble = () => {
   // Función para crear un nuevo tipo de mueble
   const crearTipoMueble = async (tipoMueble) => {
     try {
+      const payload = { ...tipoMueble, cliente: { ...(tipoMueble?.cliente || {}), codCliente: COD_CLIENTE_FIJO } };
       const response = await fetch("/api-sellout/deprati/tipo-mueble", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tipoMueble),
+        body: JSON.stringify(payload),
       });
   
       if (!response.ok) throw new Error(`Error al crear tipo de mueble: ${response.statusText}`);
@@ -167,10 +167,11 @@ const DepratiTipoMueble = () => {
   const actualizarTipoMueble = async (tipoMueble) => {
     setLoading(true);
     try {
+      const payload = { ...tipoMueble, cliente: { ...(tipoMueble?.cliente || {}), codCliente: COD_CLIENTE_FIJO } };
       const response = await fetch(`/api-sellout/deprati/tipo-mueble/${tipoMueble.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(tipoMueble),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error(`Error al actualizar tipo de mueble: ${response.statusText}`);

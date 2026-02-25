@@ -20,11 +20,7 @@ COPY java-security-override.properties /java-security-override.properties
 ENV JAVA_OPTS=""
 
 # Forzar TLS 1.0 y cargar override (INSEGURO)
-<<<<<<< HEAD
 ENV JAVA_TOOL_OPTIONS="-Djdk.tls.client.protocols=TLSv1 -Djava.security.properties=/java-security-override.properties"
-=======
-ENV JAVA_TOOL_OPTIONS="-Djdk.tls.client.protocols=TLSv1 -Dhttps.protocols=TLSv1 -Djava.security.properties=/java-security-override.properties"
->>>>>>> Develop
 
 # Ejecutar la aplicación
 ENTRYPOINT [ "sh", "-c", "java $JAVA_OPTS $JAVA_TOOL_OPTIONS -Djava.security.egd=file:/dev/./urandom -jar /app.jar" ]

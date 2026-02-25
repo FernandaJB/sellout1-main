@@ -1,9 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./css/deprati.css";
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
 
 import * as XLSX from "xlsx";
 import { Toast } from "primereact/toast";
@@ -882,9 +878,6 @@ const Fybeca = () => {
     try {
       const qs = new URLSearchParams();
       qs.append("codCliente", COD_CLIENTE_FIJO);
-      if (Number.isFinite(appliedFilters.year)) qs.append("anio", appliedFilters.year);
-      if (Number.isFinite(appliedFilters.month)) qs.append("mes", appliedFilters.month);
-      if (appliedFilters.marca) qs.append("marca", appliedFilters.marca);
 
       const { blob, filename } = await apiFetch(`/reporte-ventas-zip?${qs.toString()}`, {
         expect: "blob",

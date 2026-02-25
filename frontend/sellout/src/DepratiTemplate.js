@@ -1,9 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import "./css/deprati.css";
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
 
 import * as XLSX from "xlsx";
 import { Toast } from "primereact/toast";
@@ -22,6 +18,8 @@ import { Toolbar } from "primereact/toolbar";
 import { Divider } from "primereact/divider";
 import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 
+const COD_CLIENTE_FIJO = "MZCL-000009";
+
 const Deprati = () => {
   const [isSaving, setIsSaving] = useState(false);
 
@@ -33,6 +31,8 @@ const Deprati = () => {
   const [editVenta, setEditVenta] = useState(null);
   const toast = useRef(null);
   const [ultimoNoEncontrados, setUltimoNoEncontrados] = useState([]);
+  const getCodCliente = (v) => String(v?.codCliente ?? v?.cliente?.codCliente ?? "").trim();
+  const isFixedCliente = (v) => getCodCliente(v) === COD_CLIENTE_FIJO;
 
   // ✅ Mejoras UI
   const [checkboxSelection, setCheckboxSelection] = useState(true); // switch selección por checkbox
@@ -179,7 +179,8 @@ const Deprati = () => {
       const res = await fetch(`/api-sellout/deprati/venta?${qs.toString()}`, { signal: AbortSignal.timeout(300000) });
       if (!res.ok) throw new Error("Error al cargar ventas");
       const data = await res.json();
-      const list = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+      const listAll = (Array.isArray(data) ? data : []).map((v) => (v?.cliente?.ciudad ? { ...v, ciudad: v.cliente.ciudad } : v));
+      const list = listAll.filter(isFixedCliente);
       list._fromApi = true;
       setVentas(list);
       setFilteredVentas(list);
@@ -608,7 +609,7 @@ const Deprati = () => {
       const res = await fetch(`/api-sellout/deprati/venta?${params.toString()}`, { signal: AbortSignal.timeout(300000) });
       if (!res.ok) throw new Error("Error al aplicar filtros");
       const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
+      const list = (Array.isArray(data) ? data : []).filter(isFixedCliente);
       list._fromApi = true;
       setFilteredVentas(list);
       setVentas(list);
@@ -983,10 +984,11 @@ const Deprati = () => {
     }
     setIsSaving(true);
     try {
+      const payload = { ...editVenta, cliente: { ...(editVenta?.cliente || {}), codCliente: COD_CLIENTE_FIJO } };
       const res = await fetch(`/api-sellout/deprati/venta/${editVenta.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editVenta),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Error al editar la venta");
       setEditVenta(null);

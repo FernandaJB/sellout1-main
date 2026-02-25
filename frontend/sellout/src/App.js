@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import { FaSignOutAlt, FaMedkit, FaShoppingBag, FaFileExcel, FaUsers, FaStore } from 'react-icons/fa'; // 👈 FaStore para RM
 import Login from './login';
 import Registrar from './Registrar';
-import OlvidarContraseña from './OlvidarContraseña';
+import OlvidarContrasena from './OlvidarContrasena';
 import RestablecerContrasenia from './RestablecerContrasenia';
 import FybecaMantenimientoProducto from './FybecaMantenimientoProducto';
 import FybecaTemplate from './FybecaTemplate';
@@ -19,6 +19,7 @@ import './css/menu-dashboard.css';
 import "primereact/resources/themes/lara-light-indigo/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
+import "primeflex/primeflex.css";
 
 const App = () => {
   const [user, setUser] = useState(null);
@@ -191,7 +192,7 @@ const App = () => {
       <Routes>
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
         <Route path="/Registrar" element={<Registrar />} />
-        <Route path="/OlvidarContraseña" element={<OlvidarContraseña />} />
+        <Route path="/OlvidarContraseña" element={<OlvidarContrasena />} />
         <Route path="/RestablecerContrasenia" element={<RestablecerContrasenia />} />
         <Route
           path="/"

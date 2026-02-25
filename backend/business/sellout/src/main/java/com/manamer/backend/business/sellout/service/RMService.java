@@ -91,10 +91,16 @@ public class RMService {
         final double su;
         final double sd;
         final int filaExcel;
-        StockInfo(double su, double sd, int filaExcel) {
+        final String marca;
+        final String nombreMaterial;
+        final String codigoMaterial;
+        StockInfo(double su, double sd, int filaExcel, String marca, String nombreMaterial, String codigoMaterial) {
             this.su = su;
             this.sd = sd;
             this.filaExcel = filaExcel;
+            this.marca = marca;
+            this.nombreMaterial = nombreMaterial;
+            this.codigoMaterial = codigoMaterial;
         }
     }
 
@@ -144,6 +150,35 @@ public class RMService {
                 }
             }
             boolean ok = requiredHeadersNorm.stream().allMatch(headers::contains);
+            if (ok) return r;
+        }
+        return null;
+    }
+
+    private static Integer findHeaderRowByGroups(Sheet sheet, List<Set<String>> requiredGroupsNorm, int maxScanRows) {
+        int last = Math.min(sheet.getLastRowNum(), maxScanRows);
+        for (int r = 0; r <= last; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+
+            Set<String> headers = new HashSet<>();
+            for (int c = 0; c < Math.min(row.getLastCellNum(), 120); c++) {
+                Cell cell = row.getCell(c);
+                if (cell == null) continue;
+                if (cell.getCellType() == CellType.STRING) {
+                    String h = norm(cell.getStringCellValue());
+                    if (!h.isBlank()) headers.add(h);
+                }
+            }
+
+            boolean ok = true;
+            for (Set<String> group : requiredGroupsNorm) {
+                boolean groupOk = false;
+                for (String opt : group) {
+                    if (headers.contains(opt)) { groupOk = true; break; }
+                }
+                if (!groupOk) { ok = false; break; }
+            }
             if (ok) return r;
         }
         return null;
@@ -485,6 +520,8 @@ public class RMService {
 
         int filasLeidasVentas = 0, filasProcesadasVentas = 0;
         int filasLeidasStock  = 0, filasProcesadasStock  = 0;
+        int filasInsertadasStockSinVentas = 0;
+        int stockSinVentaOmitidosEnLog = 0;
 
         final int BUFFER_SIZE = 5000;
 
@@ -498,14 +535,21 @@ public class RMService {
             Sheet shVentas = wb.getSheet("VENTAS");
             if (shVentas == null) shVentas = wb.getSheetAt(0);
 
-            Integer headerVentas = findHeaderRow(shVentas, Set.of("fecha_venta", "nombre_tienda", "ref_proveedor"), 30);
+            Set<String> grpFecha = Set.of("fecha_venta", "fecha", "fecha_corte", "fecha_de_venta");
+            Set<String> grpTienda = Set.of("nombre_tienda", "tienda", "pdv", "punto_de_venta", "nombre_pdv");
+            Set<String> grpRef = Set.of("ref_proveedor", "ref", "cod_barra", "codigo_barra", "codigo_barras", "codigobarra", "cod_barra_sap", "codbarra");
+
+            Integer headerVentas = findHeaderRowByGroups(shVentas, List.of(grpFecha, grpTienda, grpRef), 30);
             Map<String, Integer> hV = (headerVentas == null) ? Map.of() : buildHeaderIndex(shVentas, headerVentas);
 
-            Integer cFechaV  = (headerVentas == null) ? null : pick(hV, "fecha_venta");
-            Integer cTiendaV = (headerVentas == null) ? null : pick(hV, "nombre_tienda", "tienda");
-            Integer cRefV    = (headerVentas == null) ? null : pick(hV, "ref_proveedor");
-            Integer cUsdV    = (headerVentas == null) ? null : pick(hV, "ventas_en_usd_sin_iva");
-            Integer cUdsV    = (headerVentas == null) ? null : pick(hV, "ventas_en_udd");
+            Integer cFechaV  = (headerVentas == null) ? null : pick(hV, "fecha_venta", "fecha", "fecha_corte", "fecha_de_venta");
+            Integer cTiendaV = (headerVentas == null) ? null : pick(hV, "nombre_tienda", "tienda", "pdv", "punto_de_venta", "nombre_pdv");
+            Integer cRefV    = (headerVentas == null) ? null : pick(hV, "ref_proveedor", "ref", "cod_barra", "codigo_barra", "codigo_barras", "codigobarra", "cod_barra_sap", "codbarra");
+            Integer cUsdV    = (headerVentas == null) ? null : pick(hV, "ventas_en_usd_sin_iva", "venta_usd", "venta_dolares", "ventas_usd");
+            Integer cUdsV    = (headerVentas == null) ? null : pick(hV, "ventas_en_udd", "ventas_en_uds", "venta_unidad", "venta_unidades", "ventas_unidades");
+            Integer cMarcaV  = (headerVentas == null) ? null : pick(hV, "marca");
+            Integer cNombreMaterialV = (headerVentas == null) ? null : pick(hV, "nombre_material", "descripcion", "descripcion_material");
+            Integer cCodigoMaterialV = (headerVentas == null) ? null : pick(hV, "codigo_material", "codigo_sap", "codigo_producto");
 
             if (headerVentas != null) {
                 for (int r = headerVentas + 1; r <= shVentas.getLastRowNum(); r++) {
@@ -521,19 +565,22 @@ public class RMService {
             // ✅ STOCK usa fecha_venta (NO fecha_corte)
             Integer headerStock = null;
             Map<String, Integer> hS = Map.of();
-            Integer cFechaS = null, cTiendaS = null, cRefS = null, cUnS = null, cDolS = null;
+            Integer cFechaS = null, cTiendaS = null, cRefS = null, cUnS = null, cDolS = null, cMarcaS = null, cNombreMaterialS = null, cCodigoMaterialS = null;
 
             if (shStock != null) {
-                headerStock = findHeaderRow(shStock, Set.of("fecha_venta", "nombre_tienda", "ref_proveedor"), 30);
+                headerStock = findHeaderRowByGroups(shStock, List.of(grpFecha, grpTienda, grpRef), 30);
                 if (headerStock != null) {
                     hS = buildHeaderIndex(shStock, headerStock);
 
-                    cFechaS  = pick(hS, "fecha_venta");
-                    cTiendaS = pick(hS, "nombre_tienda", "tienda");
-                    cRefS    = pick(hS, "ref_proveedor");
+                    cFechaS  = pick(hS, "fecha_venta", "fecha", "fecha_corte", "fecha_de_venta");
+                    cTiendaS = pick(hS, "nombre_tienda", "tienda", "pdv", "punto_de_venta", "nombre_pdv");
+                    cRefS    = pick(hS, "ref_proveedor", "ref", "cod_barra", "codigo_barra", "codigo_barras", "codigobarra", "cod_barra_sap", "codbarra");
 
                     cUnS  = pick(hS, "cantidad_unidades", "stock_unidades", "unidades");
                     cDolS = pick(hS, "cantidad_dolares", "stock_dolares", "dolares", "usd");
+                    cMarcaS = pick(hS, "marca");
+                    cNombreMaterialS = pick(hS, "nombre_material", "descripcion", "descripcion_material");
+                    cCodigoMaterialS = pick(hS, "codigo_material", "codigo_sap", "codigo_producto");
 
                     for (int r = headerStock + 1; r <= shStock.getLastRowNum(); r++) {
                         Row row = shStock.getRow(r);
@@ -594,7 +641,15 @@ public class RMService {
                             String key = zdt.getYear() + "|" + zdt.getMonthValue() + "|" + zdt.getDayOfMonth() + "|" + cb + "|" + tienda;
 
                             // Si viene repetido, se queda el último (puedes cambiar a suma si deseas)
-                            stockByKey.put(key, new StockInfo(suVal, sdVal, r + 1));
+                            String marca = getString(row, cMarcaS);
+                            String nombreMaterial = getString(row, cNombreMaterialS);
+                            String codigoMaterial = getString(row, cCodigoMaterialS);
+                            stockByKey.put(key, new StockInfo(
+                                    suVal, sdVal, r + 1,
+                                    (marca != null ? marca.trim() : null),
+                                    (nombreMaterial != null ? nombreMaterial.trim() : null),
+                                    (codigoMaterial != null ? codigoMaterial.trim() : null)
+                            ));
 
                             filasProcesadasStock++;
 
@@ -684,6 +739,16 @@ public class RMService {
                         SapCacheRow sapVenta = sapMap.get(cb);
                         if (sapVenta != null) aplicarDatosSapCache(v, sapVenta);
 
+                        String marcaExcel = getString(row, cMarcaV);
+                        if (marcaExcel != null && !marcaExcel.isBlank()) v.setMarca(marcaExcel.trim());
+                        String nombreMatExcel = getString(row, cNombreMaterialV);
+                        if (nombreMatExcel != null && !nombreMatExcel.isBlank()) {
+                            v.setNombreProducto(nombreMatExcel.trim());
+                            v.setDescripcion(nombreMatExcel.trim());
+                        }
+                        String codMatExcel = getString(row, cCodigoMaterialV);
+                        if (codMatExcel != null && !codMatExcel.isBlank()) v.setCodigoSap(codMatExcel.trim());
+
                         // ✅ AQUÍ el cambio: stock se toma del MAP de STOCK
                         String key = v.getAnio() + "|" + v.getMes() + "|" + v.getDia() + "|" + cb + "|" + tienda;
                         keysVentas.add(key);
@@ -727,15 +792,102 @@ public class RMService {
             }
 
             // ============================================================
-            // 3) Incidencias: STOCK sin match en VENTAS (para que se entienda qué faltó)
+            // 3) Insertar STOCK sin match en VENTAS como venta=0
             // ============================================================
-            for (Map.Entry<String, StockInfo> e : stockByKey.entrySet()) {
-                String key = e.getKey();
-                if (!keysVentas.contains(key)) {
+            if (!stockByKey.isEmpty()) {
+                List<Venta> bufferStockOnly = new ArrayList<>(BUFFER_SIZE);
+                final int MAX_LOG_STOCK_SIN_VENTA = 200;
+                for (Map.Entry<String, StockInfo> e : stockByKey.entrySet()) {
+                    String key = e.getKey();
+                    if (keysVentas.contains(key)) continue;
+
+                    String[] parts = key.split("\\|", -1);
+                    if (parts.length < 5) continue;
+
+                    Integer anio = null, mes = null, dia = null;
+                    try { anio = Integer.parseInt(parts[0]); } catch (Exception ignore) {}
+                    try { mes = Integer.parseInt(parts[1]); } catch (Exception ignore) {}
+                    try { dia = Integer.parseInt(parts[2]); } catch (Exception ignore) {}
+
+                    String cb = parts[3] != null ? parts[3].trim() : null;
+                    String tienda = parts[4] != null ? parts[4].trim() : null;
+                    if (cb == null || cb.isBlank()) continue;
+                    if (anio == null || mes == null || dia == null) continue;
+
+                    Long productoId = productoIdMap.get(cb);
+                    if (productoId == null) {
+                        codigosNoEncontrados.add(cb);
+
+                        SapCacheRow sap = sapMap.get(cb);
+                        if (sap != null) {
+                            productoId = crearProductoDesdeSapCache(cb, sap);
+                            productoIdMap.put(cb, productoId);
+
+                            incidencias.add(new Incidencia(cb,
+                                    "No existía en PRODUCTO. Se creó desde SAP_Prod_cache con id=" + productoId,
+                                    e.getValue().filaExcel, "STOCK"));
+                        } else {
+                            productoId = PRODUCTO_FALLBACK_ID;
+                            incidencias.add(new Incidencia(cb,
+                                    "No existe en PRODUCTO ni en SAP_Prod_cache. Se carga con PRODUCTO_FALLBACK_ID=" + PRODUCTO_FALLBACK_ID,
+                                    e.getValue().filaExcel, "STOCK"));
+                        }
+                    }
+
+                    Venta v = new Venta();
+                    v.setCliente(cliente);
+                    v.setAnio(anio);
+                    v.setMes(mes);
+                    v.setDia(dia);
+
+                    v.setCodBarra(cb);
+                    String tiendaKey = tiendaKey(tienda);
+                    v.setCodPdv(tiendaKey);
+                    v.setPdv(tiendaKey);
+
+                    v.setVentaDolares(0);
+                    v.setVentaUnidad(0);
+
+                    v.setStockUnidades(e.getValue().su);
+                    v.setStockDolares(e.getValue().sd);
+
+                    SapCacheRow sapVenta = sapMap.get(cb);
+                    if (sapVenta != null) aplicarDatosSapCache(v, sapVenta);
+
                     StockInfo st = e.getValue();
+                    if (st.marca != null && !st.marca.isBlank()) v.setMarca(st.marca.trim());
+                    if (st.nombreMaterial != null && !st.nombreMaterial.isBlank()) {
+                        v.setNombreProducto(st.nombreMaterial.trim());
+                        v.setDescripcion(st.nombreMaterial.trim());
+                    }
+                    if (st.codigoMaterial != null && !st.codigoMaterial.isBlank()) v.setCodigoSap(st.codigoMaterial.trim());
+
+                    v.setUnidadesDiarias("0");
+
+                    Producto p = new Producto();
+                    p.setId(productoId);
+                    v.setProducto(p);
+
+                    bufferStockOnly.add(v);
+                    filasInsertadasStockSinVentas++;
+                    if (filasInsertadasStockSinVentas <= MAX_LOG_STOCK_SIN_VENTA) {
+                        incidencias.add(new Incidencia(cb,
+                                "Existe en STOCK pero no existe en VENTAS para la misma fecha_venta+tienda+ref_proveedor. Se insertó con venta=0.",
+                                e.getValue().filaExcel, "STOCK"));
+                    } else {
+                        stockSinVentaOmitidosEnLog++;
+                    }
+
+                    if (bufferStockOnly.size() >= BUFFER_SIZE) {
+                        upsertVentasEnBloque(bufferStockOnly);
+                        bufferStockOnly.clear();
+                    }
+                }
+                if (!bufferStockOnly.isEmpty()) upsertVentasEnBloque(bufferStockOnly);
+                if (stockSinVentaOmitidosEnLog > 0) {
                     incidencias.add(new Incidencia("STOCK_SIN_VENTA",
-                            "Existe en STOCK pero no existe en VENTAS para la misma fecha_venta+tienda+ref_proveedor. No se insertó.",
-                            st.filaExcel, "STOCK"));
+                            "Se insertaron más filas de STOCK sin venta. Omitidas en el log: " + stockSinVentaOmitidosEnLog,
+                            -1, "STOCK"));
                 }
             }
 
@@ -756,6 +908,7 @@ public class RMService {
 
         out.put("filasLeidasStock", filasLeidasStock);
         out.put("filasProcesadasStock", filasProcesadasStock);
+        out.put("filasInsertadasStockSinVentas", filasInsertadasStockSinVentas);
 
         out.put("codigosNoEncontrados", codigosNoEncontrados.stream().sorted().collect(Collectors.toList()));
         out.put("incidencias", incidencias);

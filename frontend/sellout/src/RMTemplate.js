@@ -17,12 +17,8 @@ import { ConfirmDialog, confirmDialog } from "primereact/confirmdialog";
 import { Calendar } from "primereact/calendar";
 import { InputNumber } from "primereact/inputnumber";
 
-import "primereact/resources/themes/lara-light-indigo/theme.css";
-import "primereact/resources/primereact.min.css";
-import "primeicons/primeicons.css";
-import "primeflex/primeflex.css";
-
 // ================= API base =================
+const COD_CLIENTE_FIJO = "MZCL-003131";
 const API_BASE = "/api-sellout/rm";
 
 // ======= Límite de eliminación/selección =======
@@ -331,7 +327,7 @@ const RM = () => {
   const [filterYear, setFilterYear] = useState(null);
   const [filterMonth, setFilterMonth] = useState(null);
   const [filterMarca, setFilterMarca] = useState("");
-  const [filterCliente, setFilterCliente] = useState(null);
+  const [filterCliente, setFilterCliente] = useState(COD_CLIENTE_FIJO);
   const [filterDateRange, setFilterDateRange] = useState(null);
 
   // options filtros
@@ -345,7 +341,7 @@ const RM = () => {
     year: null,
     month: null,
     marca: "",
-    cliente: null,
+    cliente: COD_CLIENTE_FIJO,
     dateFrom: null,
     dateTo: null,
   });
@@ -495,9 +491,12 @@ const RM = () => {
           return { label, value: String(cod) };
         })
         .filter(Boolean);
-      setClientesOptions(opts);
+      const fixed = opts.filter((o) => o.value === COD_CLIENTE_FIJO);
+      setClientesOptions(fixed.length ? fixed : [{ label: COD_CLIENTE_FIJO, value: COD_CLIENTE_FIJO }]);
+      setFilterCliente(COD_CLIENTE_FIJO);
     } catch {
-      setClientesOptions([]);
+      setClientesOptions([{ label: COD_CLIENTE_FIJO, value: COD_CLIENTE_FIJO }]);
+      setFilterCliente(COD_CLIENTE_FIJO);
     }
   };
 
@@ -604,8 +603,8 @@ const RM = () => {
 
   useEffect(() => {
     loadClientesOptions();
-    loadYearsOptions();
-    loadMarcasOptions();
+    loadYearsOptions(COD_CLIENTE_FIJO);
+    loadMarcasOptions(COD_CLIENTE_FIJO);
     clearVentas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -839,11 +838,12 @@ const RM = () => {
     try {
       const qs = new URLSearchParams();
       if (appliedFilters?.cliente) qs.set("codCliente", String(appliedFilters.cliente));
+      const payload = { ...venta, cliente: { ...(venta?.cliente || {}), codCliente: COD_CLIENTE_FIJO } };
 
       await apiFetch(`/venta/${venta.id}${qs.toString() ? `?${qs.toString()}` : ""}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(venta),
+        body: JSON.stringify(payload),
       });
       showSuccess("Venta actualizada correctamente");
       setEditVenta(null);
@@ -919,10 +919,12 @@ const RM = () => {
   // ===== Reporte backend =====
   const downloadVentasReport = async () => {
     try {
-      const { blob, filename } = await apiFetch("/reporte-ventas", { expect: "blob" });
+      const qs = new URLSearchParams();
+      qs.append("codCliente", COD_CLIENTE_FIJO);
+      const { blob, filename } = await apiFetch(`/reporte-ventas?${qs.toString()}`, { expect: "blob", timeoutMs: null });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = filename || "reporte_ventas_rm.xlsx";
+      link.download = filename || "rm_ventas.zip";
       link.click();
       showInfo("Reporte general descargándose en segundo plano.");
     } catch (e) {
@@ -995,7 +997,7 @@ const RM = () => {
       year: filterYear,
       month: filterMonth,
       marca: filterMarca,
-      cliente: filterCliente,
+      cliente: COD_CLIENTE_FIJO,
       dateFrom,
       dateTo,
     };
@@ -1008,13 +1010,13 @@ const RM = () => {
     setFilterYear(null);
     setFilterMonth(null);
     setFilterMarca("");
-    setFilterCliente(null);
+    setFilterCliente(COD_CLIENTE_FIJO);
     setFilterDateRange(null);
     setGlobalFilter("");
     setMonthsOptions([]);
-    setAppliedFilters({ year: null, month: null, marca: "", cliente: null, dateFrom: null, dateTo: null });
-    await loadYearsOptions();
-    await loadMarcasOptions();
+    setAppliedFilters({ year: null, month: null, marca: "", cliente: COD_CLIENTE_FIJO, dateFrom: null, dateTo: null });
+    await loadYearsOptions(COD_CLIENTE_FIJO);
+    await loadMarcasOptions(COD_CLIENTE_FIJO);
     clearVentas();
     showInfo("Filtros limpiados correctamente.");
   };
@@ -1085,7 +1087,7 @@ const RM = () => {
                   />
 
                   <Button
-                    label="Reporte Ventas"
+                    label="Reporte Ventas (ZIP)"
                     icon="pi pi-file-excel"
                     className="p-button-success"
                     onClick={downloadVentasReport}
@@ -1183,15 +1185,7 @@ const RM = () => {
                       id="filterCliente"
                       value={filterCliente}
                       options={clientesOptions}
-                      onChange={async (e) => {
-                        const cli = e.value || null;
-                        setFilterCliente(cli);
-                        setFilterYear(null);
-                        setFilterMonth(null);
-                        setMonthsOptions([]);
-                        await loadYearsOptions(cli);
-                        await loadMarcasOptions(cli);
-                      }}
+                      disabled
                       placeholder="Seleccionar Cliente"
                       className="deprati-dropdown w-16rem"
                     />
