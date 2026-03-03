@@ -9,8 +9,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.MultipartException;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +37,7 @@ public class RMController {
     private final RMService rmService;
 
     private static final String DEFAULT_COD_CLIENTE = "MZCL-003131";
+    private static final long MAX_UPLOAD_BYTES = 256L * 1024 * 1024;
 
     @Autowired
     public RMController(RMService rmService) {
@@ -97,6 +104,75 @@ public class RMController {
                     "error", "Error al procesar archivo: " + e.getMessage()
             ));
         }
+    }
+
+    @PostMapping("/subir-archivo-venta/async")
+    public ResponseEntity<?> subirArchivoVentaRMAsync(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "codCliente", required = false) String codCliente
+    ) {
+        String nombre = (file != null && file.getOriginalFilename() != null) ? file.getOriginalFilename() : "archivo.xlsx";
+
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "error", "El archivo está vacío o es nulo."
+            ));
+        }
+        if (file.getSize() > MAX_UPLOAD_BYTES) {
+            return ResponseEntity.status(413).body(Map.of(
+                    "ok", false,
+                    "error", "Archivo demasiado grande.",
+                    "maxBytes", MAX_UPLOAD_BYTES
+            ));
+        }
+
+        try {
+            Path tmp = Files.createTempFile("rm_upload_", ".xlsx");
+            try (InputStream in = file.getInputStream()) {
+                Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            String jobId = rmService.iniciarCargaExcelRMAsync(tmp, codCliente, nombre);
+            String base = "/api-sellout/rm/subir-archivo-venta/async/" + jobId;
+            return ResponseEntity.ok(Map.of(
+                    "ok", true,
+                    "jobId", jobId,
+                    "estadoUrl", base,
+                    "resultadoUrl", base + "/resultado",
+                    "incidenciasTxtUrl", base + "/incidencias.txt"
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "ok", false,
+                    "error", "Error al iniciar la carga: " + e.getMessage()
+            ));
+        }
+    }
+
+    @ExceptionHandler({MaxUploadSizeExceededException.class, MultipartException.class})
+    public ResponseEntity<?> handleMultipartError(Exception ex) {
+        return ResponseEntity.status(413).body(Map.of(
+                "ok", false,
+                "error", "Archivo demasiado grande o request inválido.",
+                "message", (ex.getMessage() != null ? ex.getMessage() : ex.toString()),
+                "maxBytes", MAX_UPLOAD_BYTES
+        ));
+    }
+
+    @GetMapping("/subir-archivo-venta/async/{jobId}")
+    public ResponseEntity<?> estadoCargaVentaRMAsync(@PathVariable("jobId") String jobId) {
+        return ResponseEntity.ok(rmService.obtenerEstadoCargaExcelRMAsync(jobId));
+    }
+
+    @GetMapping("/subir-archivo-venta/async/{jobId}/resultado")
+    public ResponseEntity<?> resultadoCargaVentaRMAsync(@PathVariable("jobId") String jobId) {
+        return ResponseEntity.ok(rmService.obtenerResultadoCargaExcelRMAsync(jobId));
+    }
+
+    @GetMapping("/subir-archivo-venta/async/{jobId}/incidencias.txt")
+    public ResponseEntity<?> incidenciasTxtCargaVentaRMAsync(@PathVariable("jobId") String jobId) {
+        return rmService.descargarIncidenciasTxtAsync(jobId);
     }
 
     // ==========================================================

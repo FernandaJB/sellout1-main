@@ -42,15 +42,19 @@ async function apiFetch(
   path,
   { method = "GET", headers = {}, body, expect = "json", timeoutMs = 300000 } = {}
 ) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const init = {
     method,
     headers: {
       ...(expect === "json" ? { Accept: "application/json" } : {}),
       ...headers,
     },
     body,
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  };
+  if (timeoutMs !== null && timeoutMs !== undefined) {
+    init.signal = AbortSignal.timeout(timeoutMs);
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, init);
 
   if (!res.ok) {
     let msg = "";
@@ -660,11 +664,53 @@ const RM = () => {
     const start = performance.now();
 
     try {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      const stopOverlay = () => {
+        setUploadRemainingMs(null);
+        setLoadingTemplate(false);
+
+        if (uploadTimerRef.current) {
+          clearInterval(uploadTimerRef.current);
+          uploadTimerRef.current = null;
+        }
+        if (elapsedTimerRef.current) {
+          clearInterval(elapsedTimerRef.current);
+          elapsedTimerRef.current = null;
+        }
+      };
+
+      const pollJob = async (jobId) => {
+        let fails = 0;
+        while (true) {
+          try {
+            const stRes = await fetch(`${API_BASE}/subir-archivo-venta/async/${encodeURIComponent(jobId)}`, {
+              method: "GET",
+              cache: "no-store",
+            });
+            const st = await stRes.json().catch(() => ({}));
+            if (!stRes.ok || st?.ok === false) {
+              const msg = st?.error || `Error consultando estado (HTTP ${stRes.status})`;
+              throw new Error(msg);
+            }
+            const estado = String(st?.estado || "");
+            if (estado === "TERMINADO") return st;
+            if (estado === "FALLIDO") throw new Error(st?.error || "La carga falló.");
+            fails = 0;
+            await sleep(3000);
+          } catch (e) {
+            fails += 1;
+            const wait = Math.min(30000, 2000 * fails);
+            await sleep(wait);
+          }
+        }
+      };
+
       const formData = new FormData();
       formData.append("file", file);
       if (appliedFilters?.cliente) formData.append("codCliente", String(appliedFilters.cliente));
 
-      const res = await fetch(`${API_BASE}/subir-archivo-venta`, {
+      const res = await fetch(`${API_BASE}/subir-archivo-venta/async`, {
         method: "POST",
         body: formData,
         signal: AbortSignal.timeout(controllerTimeoutMs),
@@ -684,7 +730,20 @@ const RM = () => {
         throw new Error(msg || `Error HTTP ${res.status}`);
       }
 
-      const result = await res.json();
+      const init = await res.json();
+      const jobId = init?.jobId;
+      if (!jobId) throw new Error(init?.error || "No se recibió jobId de la carga.");
+
+      showInfo(`Archivo subido. Procesando en el servidor (ID: ${jobId}). Puedes dejar esta pantalla abierta.`);
+
+      await pollJob(jobId);
+
+      const resFinal = await fetch(`${API_BASE}/subir-archivo-venta/async/${encodeURIComponent(jobId)}/resultado`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      if (!resFinal.ok) throw new Error(`No se pudo obtener el resultado (HTTP ${resFinal.status}).`);
+      const result = await resFinal.json();
 
       const ok = !!result?.ok;
 
@@ -746,6 +805,8 @@ const RM = () => {
       });
       setLogDetalladoTxt(detailed);
       setLogDetalladoName(`log_detallado_rm_${fechaStr}.txt`);
+
+      stopOverlay();
 
       if (hasAnyApplied) await fetchVentasWithFilters(appliedFilters);
       else clearVentas();
@@ -921,11 +982,16 @@ const RM = () => {
     try {
       const qs = new URLSearchParams();
       qs.append("codCliente", COD_CLIENTE_FIJO);
-      const { blob, filename } = await apiFetch(`/reporte-ventas?${qs.toString()}`, { expect: "blob", timeoutMs: null });
+      const { blob, filename } = await apiFetch(`/reporte-ventas?${qs.toString()}`, {
+        expect: "blob",
+        timeoutMs: null,
+      });
       const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
+      link.href = url;
       link.download = filename || "rm_ventas.zip";
       link.click();
+      URL.revokeObjectURL(url);
       showInfo("Reporte general descargándose en segundo plano.");
     } catch (e) {
       showError(String(e));
